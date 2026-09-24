@@ -1,14 +1,16 @@
 // Jellyfin REST client. Every call tunnels through the phone via
 // client.net.fetch, so it works with no CORS and away from home as long as
-// the phone can reach the server. Auth rides three ways on every request:
-// the api_key query param (required for stream and image URLs, where no
-// headers can be sent), the X-Emby-Token header, and the official
-// X-Emby-Authorization header with the token embedded — whichever the
-// server/proxy stack honors wins.
+// the phone can reach the server. Auth rides two ways on every request:
+// the modern `Authorization: MediaBrowser ...` header with the token
+// embedded (the only header form Jellyfin honors once legacy authorization
+// is disabled — every X-Emby-* header is silently ignored there), and the
+// `ApiKey` query param (capital A — the lowercase `api_key` variant is a
+// legacy alias and is ignored too; the query param is required for stream
+// and image URLs, where no headers can be sent).
 
 import { getClient } from './client';
 
-export const FINCH_VERSION = '0.1.10';
+export const FINCH_VERSION = '0.1.11';
 
 // Trailing slashes turn every path into a double-slash (//Users/...) which
 // some servers and reverse proxies reject — strip them once, up front.
@@ -257,7 +259,7 @@ export class JellyfinClient {
   }
 
   private url(path: string, params: Record<string, string | number | boolean> = {}): string {
-    const q = new URLSearchParams({ api_key: this.creds.apiKey });
+    const q = new URLSearchParams({ ApiKey: this.creds.apiKey });
     for (const [k, v] of Object.entries(params)) q.set(k, String(v));
     return `${this.creds.server}${path}?${q.toString()}`;
   }
@@ -269,16 +271,15 @@ export class JellyfinClient {
     body?: unknown,
   ): Promise<T> {
     const client = getClient();
-    // Auth rides three ways: the api_key query param (required for stream and
-    // image URLs, where no headers can be sent), the X-Emby-Token header, and
-    // the official X-Emby-Authorization header with the token embedded
-    // (Jellyfin's canonical form — survives any proxy or HTTP stack that
-    // mangles query strings or drops unknown headers).
+    // Auth rides two ways: the modern `Authorization` header with the token
+    // embedded (required — with legacy authorization disabled, Jellyfin
+    // ignores X-Emby-Token, X-Emby-Authorization and the lowercase api_key
+    // query param entirely) plus the `ApiKey` query param (capital A),
+    // which stream and image URLs need because no headers can be sent there.
     const deviceId = await finchDeviceId();
     const headers = [
-      { name: 'X-Emby-Token', value: this.creds.apiKey },
       {
-        name: 'X-Emby-Authorization',
+        name: 'Authorization',
         value:
           `MediaBrowser Client="Finch", Device="Car Thing", DeviceId="${deviceId}", ` +
           `Version="${FINCH_VERSION}", Token="${this.creds.apiKey}"`,
@@ -554,9 +555,8 @@ export async function testConnection(server: string, apiKey: string): Promise<{ 
   const client = getClient();
   const deviceId = await finchDeviceId();
   const headers = [
-    { name: 'X-Emby-Token', value: key },
     {
-      name: 'X-Emby-Authorization',
+      name: 'Authorization',
       value:
         `MediaBrowser Client="Finch", Device="Car Thing", DeviceId="${deviceId}", ` +
         `Version="${FINCH_VERSION}", Token="${key}"`,
@@ -564,7 +564,7 @@ export async function testConnection(server: string, apiKey: string): Promise<{ 
   ];
   const res = await client.net.fetch({
     request: {
-      url: `${clean}/System/Info?api_key=${encodeURIComponent(key)}`,
+      url: `${clean}/System/Info?ApiKey=${encodeURIComponent(key)}`,
       method: 'GET',
       headers,
       body: null,
@@ -582,7 +582,7 @@ export async function testConnection(server: string, apiKey: string): Promise<{ 
   // System/Info needs no user; now find the user id for library calls.
   const usersRes = await client.net.fetch({
     request: {
-      url: `${clean}/Users?api_key=${encodeURIComponent(key)}`,
+      url: `${clean}/Users?ApiKey=${encodeURIComponent(key)}`,
       method: 'GET',
       headers,
       body: null,

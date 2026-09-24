@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const APP_VERSION = '0.1.10';
+const APP_VERSION = '0.1.11';
 
 type Status = { kind: 'ok' | 'err' | 'info'; text: string } | null;
 
@@ -117,8 +117,8 @@ function Settings() {
     setBusy(true);
     setStatus({ kind: 'info', text: 'testing the API key…' });
     try {
-      await getJson(`${srv}/System/Info?api_key=${encodeURIComponent(key)}`);
-      const users = (await getJson(`${srv}/Users?api_key=${encodeURIComponent(key)}`)) as {
+      await getJson(`${srv}/System/Info?ApiKey=${encodeURIComponent(key)}`);
+      const users = (await getJson(`${srv}/Users?ApiKey=${encodeURIComponent(key)}`)) as {
         Id: string;
         Name: string;
       }[];
