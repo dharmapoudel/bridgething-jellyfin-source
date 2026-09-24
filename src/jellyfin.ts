@@ -8,7 +8,7 @@
 
 import { getClient } from './client';
 
-export const FINCH_VERSION = '0.1.6';
+export const FINCH_VERSION = '0.1.8';
 
 // Trailing slashes turn every path into a double-slash (//Users/...) which
 // some servers and reverse proxies reject — strip them once, up front.
@@ -161,6 +161,17 @@ const FETCH_TIMEOUT_MS = 15_000;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+// Include a snippet of the server's error body — Jellyfin/ASP.NET usually
+// names the exact complaint in it, which beats guessing from the status code.
+function errBody(body: Uint8Array): string {
+  try {
+    const t = dec.decode(body).replace(/\s+/g, ' ').trim();
+    return t ? `: ${t.slice(0, 220)}` : '';
+  } catch {
+    return '';
+  }
+}
+
 // Stable device id shared with the playback engine (player.ts uses the same
 // store key). Sent in the X-Emby-Authorization header.
 const DEVICE_ID_KEY = 'finch:device-id';
@@ -298,7 +309,7 @@ export class JellyfinClient {
       );
     }
     if (r.status >= 400) {
-      throw new JellyfinError(r.status, `server error ${r.status}`);
+      throw new JellyfinError(r.status, `server error ${r.status}${errBody(r.body)}`);
     }
     const text = dec.decode(r.body);
     if (!text) return null as T;
@@ -566,7 +577,7 @@ export async function testConnection(server: string, apiKey: string): Promise<{ 
     throw new JellyfinError(401, `the server rejected that API key (${res.response.response.status})`);
   }
   if (res.response.response.status >= 400) {
-    throw new JellyfinError(res.response.response.status, `server error ${res.response.response.status}`);
+    throw new JellyfinError(res.response.response.status, `server error ${res.response.response.status}${errBody(res.response.response.body)}`);
   }
   // System/Info needs no user; now find the user id for library calls.
   const usersRes = await client.net.fetch({
@@ -586,8 +597,8 @@ export async function testConnection(server: string, apiKey: string): Promise<{ 
 }
 
 // ---- Quick Connect -------------------------------------------------------
-// Jellyfin's device-linking flow: the device asks for a code (no auth
-// needed), the user types it into Jellyfin (user menu → Quick Connect, or a
+// Jellyfin's device-linking flow: the device asks for a code (no token
+// needed, though the client identification header still is), the user types it into Jellyfin (user menu → Quick Connect, or a
 // Jellyfin app's settings), approves it, and the device trades the secret
 // for a real access token + user id. Nothing to type on the Car Thing.
 
@@ -596,31 +607,44 @@ export interface QuickConnectSession {
   code: string;
 }
 
-async function qcFetch<T>(server: string, path: string, body?: unknown): Promise<T> {
+async function qcFetch<T>(server: string, path: string, opts?: { body?: unknown; post?: boolean }): Promise<T> {
   const clean = cleanServer(server);
   const client = getClient();
-  const headers: { name: string; value: string }[] = [];
-  if (body) headers.push({ name: 'Content-Type', value: 'application/json' });
+  // No token exists yet at this point, but Jellyfin still parses the
+  // X-Emby-Authorization client header on these endpoints — without it the
+  // server throws (ArgumentNullException) and answers 400 "Error processing
+  // request.", which is exactly what a headerless Initiate gets.
+  const deviceId = await finchDeviceId();
+  const headers: { name: string; value: string }[] = [
+    {
+      name: 'X-Emby-Authorization',
+      value: `MediaBrowser Client="Finch", Device="Car Thing", DeviceId="${deviceId}", Version="${FINCH_VERSION}"`,
+    },
+  ];
+  const hasBody = opts?.body !== undefined;
+  const method = hasBody || opts?.post ? 'POST' : 'GET';
+  if (hasBody) headers.push({ name: 'Content-Type', value: 'application/json' });
   const res = await client.net.fetch({
     request: {
       url: `${clean}${path}`,
-      method: body ? 'POST' : 'GET',
+      method,
       headers,
-      body: body ? enc.encode(JSON.stringify(body)) : null,
+      body: hasBody ? enc.encode(JSON.stringify(opts.body)) : null,
       timeoutMs: FETCH_TIMEOUT_MS,
       redirect: 'follow',
     },
   });
   if (!res.ok) throw new JellyfinError(0, 'could not reach the server; check the URL and that the phone has network');
   const r = res.response.response;
-  if (r.status >= 400) throw new JellyfinError(r.status, `server error ${r.status}`);
+  if (r.status >= 400) throw new JellyfinError(r.status, `server error ${r.status}${errBody(r.body)}`);
   return JSON.parse(dec.decode(r.body)) as T;
 }
 
-// Step 1: get a secret + the 6-digit code to show the user. Needs no auth.
-// Initiate is POST-only on Jellyfin — the empty JSON body matters.
+// Step 1: get a secret + the 6-digit code to show the user. No token needed,
+// but the X-Emby-Authorization client header (sent by qcFetch) is required.
+// Initiate is POST-only on Jellyfin; the POST carries no body.
 export function quickConnectInitiate(server: string): Promise<QuickConnectSession> {
-  return qcFetch<QuickConnectSession>(server, '/QuickConnect/Initiate', {});
+  return qcFetch<QuickConnectSession>(server, '/QuickConnect/Initiate', { post: true });
 }
 
 // Step 2: poll until the user approves the code in Jellyfin.
@@ -640,7 +664,7 @@ export async function quickConnectAuthenticate(
   const data = await qcFetch<{ AccessToken?: string; User?: { Id?: string; Name?: string } }>(
     server,
     '/QuickConnect/Authenticate',
-    { Secret: secret },
+    { body: { Secret: secret } },
   );
   if (!data.AccessToken || !data.User?.Id) {
     throw new JellyfinError(0, 'the server did not return a token — approve the code in Jellyfin first.');

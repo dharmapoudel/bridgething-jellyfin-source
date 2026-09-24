@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const APP_VERSION = '0.1.6';
+const APP_VERSION = '0.1.8';
 
 type Status = { kind: 'ok' | 'err' | 'info'; text: string } | null;
 
@@ -14,20 +14,29 @@ function authHeader(deviceId: string): string {
   return `MediaBrowser Client="Finch", Device="Car Thing", DeviceId="${deviceId}", Version="${APP_VERSION}"`;
 }
 
-async function postJson(url: string, body: unknown, headers: Record<string, string> = {}): Promise<unknown> {
+async function postJson(url: string, body?: unknown, headers: Record<string, string> = {}): Promise<unknown> {
+  const hasBody = body !== undefined;
   const res = await settings.fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(body),
+    headers: hasBody ? { 'Content-Type': 'application/json', ...headers } : headers,
+    body: hasBody ? JSON.stringify(body) : undefined,
     timeoutMs: 20_000,
   });
   if (res.status === 401 || res.status === 403) throw new Error('rejected: check the username, password or API key.');
-  if (!res.ok) throw new Error(`server error ${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try {
+      detail = (await res.text()).replace(/\s+/g, ' ').trim().slice(0, 220);
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`server error ${res.status}${detail ? `: ${detail}` : ''}`);
+  }
   return res.json();
 }
 
-async function getJson(url: string): Promise<unknown> {
-  const res = await settings.fetch(url, { timeoutMs: 20_000 });
+async function getJson(url: string, headers: Record<string, string> = {}): Promise<unknown> {
+  const res = await settings.fetch(url, { headers, timeoutMs: 20_000 });
   if (res.status === 401 || res.status === 403) throw new Error('rejected: check the API key.');
   if (!res.ok) throw new Error(`server error ${res.status}`);
   return res.json();
@@ -132,7 +141,13 @@ function Settings() {
 
   // Quick Connect: Jellyfin shows nothing to type on the device — the phone
   // gets a 6-digit code, the user approves it in Jellyfin, and the phone
-  // trades it for a token. No auth is needed for these three calls.
+  // trades it for a token. No token is needed for these three calls, but
+  // Jellyfin still requires the client identification header — without it
+  // the server throws and answers 400 "Error processing request."
+  const qcHeaders = (): Record<string, string> => ({
+    Authorization: authHeader(deviceId || 'finch-settings'),
+  });
+
   async function startQuickConnect(): Promise<void> {
     const srv = cleanServer(server);
     if (!srv) {
@@ -142,7 +157,10 @@ function Settings() {
     setBusy(true);
     setStatus({ kind: 'info', text: 'asking Jellyfin for a code…' });
     try {
-      const init = (await postJson(`${srv}/QuickConnect/Initiate`, {})) as { Secret: string; Code: string };
+      const init = (await postJson(`${srv}/QuickConnect/Initiate`, undefined, qcHeaders())) as {
+        Secret: string;
+        Code: string;
+      };
       if (!init.Secret || !init.Code) throw new Error('the server did not return a Quick Connect code.');
       setQcCode(init.Code);
       
@@ -156,11 +174,16 @@ function Settings() {
           try {
             const poll = (await getJson(
               `${srv}/QuickConnect/Connect?Secret=${encodeURIComponent(init.Secret)}`,
+              qcHeaders(),
             )) as { Authenticated?: boolean };
             if (poll.Authenticated === true) {
               stopQcPoll();
               setStatus({ kind: 'info', text: 'code approved — finishing sign-in…' });
-              const auth = (await postJson(`${srv}/QuickConnect/Authenticate`, { Secret: init.Secret })) as {
+              const auth = (await postJson(
+                `${srv}/QuickConnect/Authenticate`,
+                { Secret: init.Secret },
+                qcHeaders(),
+              )) as {
                 AccessToken: string;
                 User: { Id: string; Name: string };
               };
