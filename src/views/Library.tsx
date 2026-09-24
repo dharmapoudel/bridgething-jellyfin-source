@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions } from '../actions';
 import { cached } from '../cache';
-import { AuthError, Empty, Spinner, Tile, TopBar, useArt, warmArt } from '../components';
+import { AuthError, Empty, Spinner, Tile, useArt, warmArt } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Artist, type Genre, type Playlist } from '../jellyfin';
 import type { LibTab, ViewProps } from '../nav';
@@ -13,7 +13,7 @@ const TABS: { id: LibTab; label: string }[] = [
   { id: 'genres', label: 'Genres' },
 ];
 
-export default function Library({ jf, nav, back, openMenu, initialTab }: ViewProps & { initialTab: LibTab }) {
+export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & { initialTab: LibTab }) {
   const art = useArt();
   const [tab, setTab] = useState<LibTab>(initialTab);
   const [albums, setAlbums] = useState<Album[] | null>(null);
@@ -68,7 +68,6 @@ export default function Library({ jf, nav, back, openMenu, initialTab }: ViewPro
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar title="Library" onBack={back} />
       <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-white/10 p-3">
         {TABS.map(t => (
           <button

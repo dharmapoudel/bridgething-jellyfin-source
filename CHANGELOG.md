@@ -1,3 +1,7 @@
+## 0.1.19
+
+- The Library screen no longer has the "Library" top bar with the back arrow — the Albums / Artists / Playlists / Genres row now sits at the top (the bottom tabs already handle navigation).
+
 ## 0.1.18
 
 - App icon is now a close-up of the singing finch's head — the full-body bird was too small to read at tile size. (Re-encoded under the daemon's 64KB icon cap.)
