@@ -54,6 +54,12 @@ export class PlaybackEngine {
   private lastPlayAt = 0;
   private sessionId = '';
   private progressTimer: number | null = null;
+  // latest daemon snapshot, for resume reconciliation after an app restart
+  private snapSeen = false;
+  private snapTrackId: string | null = null;
+  private snapPlaying = false;
+  private snapPositionMs = 0;
+  private adopting: string | null = null;
 
   configure(jf: JellyfinClient | null): void {
     this.jf = jf;
@@ -326,6 +332,13 @@ export class PlaybackEngine {
     playback: { state: 'stopped' | 'paused' | 'playing'; positionMs: number };
   }): void {
     const ctxUri = state.context?.uri ?? null;
+    // remember the raw snapshot for resume reconciliation (app restarted
+    // while the phone kept playing one of our tracks)
+    this.snapSeen = true;
+    this.snapTrackId =
+      ctxUri && ctxUri.startsWith(CONTEXT_PREFIX) ? ctxUri.slice(CONTEXT_PREFIX.length) : null;
+    this.snapPlaying = state.playback.state === 'playing';
+    this.snapPositionMs = state.playback.positionMs;
     if (ctxUri && !ctxUri.startsWith(CONTEXT_PREFIX)) {
       // another app took the phone; stop claiming playback
       if (!this.external) {
@@ -371,6 +384,71 @@ export class PlaybackEngine {
       } else {
         this.emit();
       }
+    }
+    // The phone is playing/paused one of our tracks but our queue is empty
+    // (app restarted mid-playback): pull the track from the server so the UI
+    // shows the true now-playing status.
+    if (!this.current() && this.snapTrackId && this.jf && this.adopting !== this.snapTrackId) {
+      void this.adoptTrackId(this.snapTrackId, this.snapPositionMs, this.snapPlaying);
+    }
+  }
+
+  // Adopt a track the phone is already playing into an empty queue.
+  private async adoptTrackId(id: string, positionMs: number, playing: boolean): Promise<void> {
+    if (!this.jf || this.current() || this.adopting === id) return;
+    this.adopting = id;
+    try {
+      const t = await this.jf.trackById(id);
+      if (this.current()) return; // something started meanwhile
+      this.queue = [t];
+      this.index = 0;
+      this.durationMs = t.durationMs;
+      this.positionMs = Math.max(0, positionMs);
+      this.positionAt = Date.now();
+      this.intentPlaying = playing;
+      this.loading = false;
+      this.awaitingStart = false;
+      this.external = false;
+      this.error = null;
+      this.emit();
+      void this.persist();
+    } catch {
+      // leave the queue empty; a later snapshot or reconcile will retry
+    } finally {
+      if (this.adopting === id) this.adopting = null;
+    }
+  }
+
+  // Called once when credentials become ready. If our queue is empty but
+  // playback is actually underway — the phone kept playing after an app
+  // restart, or the server shows a recent session for our device — adopt it
+  // so the UI shows the true status instead of an empty player.
+  async reconcileOnResume(): Promise<void> {
+    if (!this.jf || this.current()) return;
+    // daemon snapshot is ground truth: it already triggers adoption via
+    // handleSnapshot, and a definitive stopped state means "not playing".
+    if (this.snapTrackId) {
+      await this.adoptTrackId(this.snapTrackId, this.snapPositionMs, this.snapPlaying);
+      return;
+    }
+    if (this.snapSeen) return;
+    try {
+      const np = await this.jf.serverNowPlaying();
+      if (np && !this.current()) {
+        this.queue = [np.track];
+        this.index = 0;
+        this.durationMs = np.track.durationMs;
+        this.positionMs = Math.max(0, np.positionMs);
+        this.positionAt = Date.now();
+        this.intentPlaying = !np.paused;
+        this.loading = false;
+        this.external = false;
+        this.error = null;
+        this.emit();
+        void this.persist();
+      }
+    } catch {
+      // no session info; stay empty
     }
   }
 

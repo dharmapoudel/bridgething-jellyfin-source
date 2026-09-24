@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getClient } from './client';
-import { ArtCtx, Icon, MiniPlayer, useMenu, usePlayer, type ArtResolver, type MenuAction } from './components';
+import { ArtCtx, Icon, MiniPlayer, useMenu, usePlayer, usePortrait, type ArtResolver, type MenuAction } from './components';
 import { JellyfinClient, type Creds } from './jellyfin';
 import { player } from './player';
 import type { View } from './nav';
@@ -64,6 +64,7 @@ export default function App() {
   const [daemonUp, setDaemonUp] = useState(true);
   const menu = useMenu();
   usePlayer();
+  const portrait = usePortrait();
 
   const view = stack[stack.length - 1];
   const viewRef = useRef(view);
@@ -84,6 +85,10 @@ export default function App() {
     await player.loadPrefs();
     setJf(client);
     setCredsState('ready');
+    // If something is already playing from the server (app was restarted
+    // while the phone kept playing, or a session is active), adopt it so the
+    // UI shows the true now-playing status instead of an empty player.
+    void player.reconcileOnResume();
   }, []);
 
   // daemon link + player/volume subscriptions, once
@@ -184,7 +189,8 @@ export default function App() {
         return;
       }
       if (e.key === 'm' || e.key === 'M') {
-        if (v.name !== 'setup') void player.toggle();
+        // M is the device's home key: go to Finch home, never toggle playback.
+        if (v.name !== 'setup') nav({ name: 'home' });
         return;
       }
       // preset shortcuts, ignored while typing in the on-screen keyboard views
@@ -211,10 +217,11 @@ export default function App() {
     () =>
       jf
         ? {
-            trackArt: (t, w = 500) => jf.trackImage(t, w),
-            albumArt: (a, w = 500) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
-            artistArt: (a, w = 500) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
-            playlistArt: (p, w = 500) => (p.imageTag ? jf.imageUrl(p.id, w) : null),
+            // list/grid thumbs render at 56-160px: 300px source is plenty.
+            trackArt: (t, w = 300) => jf.trackImage(t, w),
+            albumArt: (a, w = 300) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
+            artistArt: (a, w = 300) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
+            playlistArt: (p, w = 300) => (p.imageTag ? jf.imageUrl(p.id, w) : null),
           }
         : null,
     [jf],
@@ -262,7 +269,9 @@ export default function App() {
         <div className="relative min-h-0 flex-1">{renderView()}</div>
         {showChrome && current ? <MiniPlayer onOpen={() => nav({ name: 'nowplaying' })} /> : null}
         {showChrome ? (
-          <nav className="flex h-20 shrink-0 items-stretch border-t border-white/10 bg-zinc-950">
+          // In portrait the physical knob overlaps the bottom-right corner, so
+          // the nav floats above it instead of sitting flush at the bottom.
+          <nav className={`flex h-20 shrink-0 items-stretch border-t border-white/10 bg-zinc-950 ${portrait ? 'mb-14' : ''}`}>
             {NAV_ITEMS.map(item => {
               const active =
                 view.name === item.view.name ||

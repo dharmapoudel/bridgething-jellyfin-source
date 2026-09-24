@@ -141,6 +141,15 @@ export function isAuthError(e: unknown): boolean {
   return e instanceof JellyfinError && (e.status === 401 || e.status === 403);
 }
 
+interface RawSession {
+  Id?: string;
+  UserId?: string;
+  DeviceId?: string;
+  LastActivityDate?: string;
+  NowPlayingItem?: RawItem | null;
+  PlayState?: { IsPaused?: boolean; PositionTicks?: number } | null;
+}
+
 interface RawItem {
   Id: string;
   Name: string;
@@ -504,6 +513,31 @@ export class JellyfinClient {
       () => undefined,
       () => undefined,
     );
+  }
+
+  // Resume detection: fetch one library item as a Track.
+  async trackById(itemId: string): Promise<Track> {
+    const raw = await this.request<RawItem>('GET', `/Users/${this.creds.userId}/Items/${itemId}`, {});
+    return normalizeTrack(raw);
+  }
+
+  // Resume detection: is OUR device already playing something on the server?
+  // Only our own DeviceId counts — never claim another client's playback.
+  // Stale sessions (no activity for a while) are ignored.
+  async serverNowPlaying(): Promise<{ track: Track; positionMs: number; paused: boolean } | null> {
+    const sessions = await this.request<RawSession[]>('GET', '/Sessions', {});
+    const deviceId = await finchDeviceId();
+    const s = sessions.find(x => x.DeviceId === deviceId && x.NowPlayingItem?.Id);
+    if (!s?.NowPlayingItem) return null;
+    if (s.LastActivityDate) {
+      const ageMs = Date.now() - new Date(s.LastActivityDate).getTime();
+      if (!Number.isFinite(ageMs) || ageMs > 15 * 60_000) return null;
+    }
+    return {
+      track: normalizeTrack(s.NowPlayingItem),
+      positionMs: Math.round((s.PlayState?.PositionTicks ?? 0) / 10_000),
+      paused: s.PlayState?.IsPaused ?? false,
+    };
   }
 
   // Lyrics need server ≥ 10.9 (the Lyrics API debuted there). Cache the

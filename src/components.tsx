@@ -13,7 +13,93 @@ import {
   type ReactNode,
 } from 'react';
 import { player } from './player';
+import { getClient } from './client';
 import type { Album, Artist, Playlist, Track } from './jellyfin';
+
+// ---- artwork cache ----
+// Small images, fetched once through the daemon and kept as in-memory blob
+// URLs: every repeat render (scrolling back, switching tabs) is instant and
+// never re-hits the server. LRU-capped so memory stays bounded.
+const ART_CACHE_MAX = 120;
+const artObjects = new Map<string, string>(); // source url -> blob object url
+const artInflight = new Map<string, Promise<string | null>>();
+
+function evictOldestArt(): void {
+  const oldest = artObjects.keys().next();
+  if (oldest.done) return;
+  const obj = artObjects.get(oldest.value);
+  if (obj) URL.revokeObjectURL(obj);
+  artObjects.delete(oldest.value);
+}
+
+async function loadArt(url: string): Promise<string | null> {
+  const hit = artObjects.get(url);
+  if (hit) {
+    artObjects.delete(url);
+    artObjects.set(url, hit); // refresh LRU order
+    return hit;
+  }
+  const inflight = artInflight.get(url);
+  if (inflight) return inflight;
+  const p = (async (): Promise<string | null> => {
+    try {
+      const res = await getClient().net.fetch({
+        request: { url, method: 'GET', headers: [], body: null, timeoutMs: 15000, redirect: 'follow' },
+      });
+      if (!res.ok) return null;
+      const r = res.response.response as { status: number; body?: Uint8Array };
+      if (r.status >= 400 || !r.body?.length) return null;
+      const bytes = new Uint8Array(r.body); // copy: BlobPart needs Uint8Array<ArrayBuffer>
+      const obj = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+      while (artObjects.size >= ART_CACHE_MAX) evictOldestArt();
+      artObjects.set(url, obj);
+      return obj;
+    } catch {
+      return null;
+    } finally {
+      artInflight.delete(url);
+    }
+  })();
+  artInflight.set(url, p);
+  return p;
+}
+
+// Pre-fetch a batch of artwork urls (e.g. a freshly loaded rail) so the
+// images are already cached when their tiles mount.
+export function warmArt(srcs: (string | null | undefined)[]): void {
+  for (const s of srcs) {
+    if (s && !artObjects.has(s) && !artInflight.has(s)) void loadArt(s);
+  }
+}
+
+export function useCachedArt(src: string | null): { url: string | null; failed: boolean } {
+  const [obj, setObj] = useState<string | null>(() => (src ? (artObjects.get(src) ?? null) : null));
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!src) {
+      setObj(null);
+      setFailed(false);
+      return;
+    }
+    let dead = false;
+    setFailed(false);
+    const hit = artObjects.get(src);
+    if (hit) {
+      setObj(hit);
+      return;
+    }
+    setObj(null);
+    void loadArt(src).then(o => {
+      if (dead) return;
+      if (o) setObj(o);
+      else setFailed(true);
+    });
+    return () => {
+      dead = true;
+    };
+  }, [src]);
+  return { url: obj, failed };
+}
 
 // artwork resolution comes from the app, which owns the jellyfin client.
 export interface ArtResolver {
@@ -123,9 +209,8 @@ export function Artwork({
   rounded?: string;
   label?: string;
 }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
-  if (!src || failed) {
+  const { url, failed } = useCachedArt(src);
+  if (!src || failed || !url) {
     return (
       <div
         className={`flex shrink-0 items-center justify-center bg-white/8 text-white/25 ${rounded}`}
@@ -138,11 +223,10 @@ export function Artwork({
   }
   return (
     <img
-      src={src}
+      src={url}
       width={size}
       height={size}
       draggable={false}
-      onError={() => setFailed(true)}
       className={`shrink-0 object-cover ${rounded}`}
       style={{ width: size, height: size }}
       alt={label}

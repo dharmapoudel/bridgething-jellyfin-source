@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions, trackActions } from '../actions';
 import { cached } from '../cache';
-import { AuthError, Empty, Icon, Spinner, Tile, TopBar, TrackRow, useArt, type MenuAction } from '../components';
+import { AuthError, Empty, Icon, Spinner, Tile, TopBar, TrackRow, useArt, warmArt, type MenuAction } from '../components';
 import { player, type PersistedQueue } from '../player';
 import { isAuthError, type Album, type Playlist, type Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
@@ -68,6 +68,16 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
     player.loadPersisted().then(setResume).catch(() => {});
   }, []);
 
+  // prefetch artwork for freshly loaded rails so tiles paint instantly
+  useEffect(() => {
+    warmArt([
+      ...(recent.data ?? []).map(t => art?.trackArt(t)),
+      ...(added.data ?? []).map(a => art?.albumArt(a)),
+      ...(favs.data ?? []).map(t => art?.trackArt(t)),
+      ...(playlists.data ?? []).map(p => art?.playlistArt(p)),
+    ]);
+  }, [recent.data, added.data, favs.data, playlists.data, art]);
+
   const startResume = (): void => {
     if (!resume) return;
     void player.playQueue(resume.tracks, resume.index).then(() => {
@@ -101,22 +111,6 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
             </button>
           </section>
         ) : null}
-
-        <section className="mb-6 px-4">
-          <button
-            type="button"
-            onClick={() => {
-              jf.shuffleAll(200)
-                .then(ts => {
-                  if (ts.length) return player.playQueue(ts, 0, true);
-                })
-                .catch(() => {});
-            }}
-            className="flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-amber-400 text-2xl font-bold text-black active:bg-amber-300"
-          >
-            <Icon name="shuffle" size={32} /> Shuffle everything
-          </button>
-        </section>
 
         {recent.error || added.error || favs.error || playlists.error ? (
           isAuthError(recent.rawError) ||

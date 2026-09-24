@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions } from '../actions';
 import { cached } from '../cache';
-import { AuthError, Empty, Spinner, Tile, TopBar, useArt } from '../components';
+import { AuthError, Empty, Spinner, Tile, TopBar, useArt, warmArt } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Artist, type Genre, type Playlist } from '../jellyfin';
 import type { LibTab, ViewProps } from '../nav';
@@ -57,6 +57,15 @@ export default function Library({ jf, nav, back, openMenu, initialTab }: ViewPro
       .catch(() => {});
   };
 
+  // prefetch artwork for freshly loaded lists so tiles paint instantly
+  useEffect(() => {
+    warmArt([
+      ...(albums ?? []).map(a => art?.albumArt(a)),
+      ...(artists ?? []).map(a => art?.artistArt(a)),
+      ...(playlists ?? []).map(p => art?.playlistArt(p)),
+    ]);
+  }, [albums, artists, playlists, art]);
+
   return (
     <div className="flex h-full flex-col">
       <TopBar title="Library" onBack={back} />
@@ -108,7 +117,7 @@ export default function Library({ jf, nav, back, openMenu, initialTab }: ViewPro
                 <Tile
                   key={a.id}
                   title={a.name}
-                  art={art?.artistArt(a, 400) ?? null}
+                  art={art?.artistArt(a) ?? null}
                   onClick={() => nav({ name: 'detail', kind: 'artist', id: a.id, title: a.name })}
                   onMenu={() =>
                     openMenu(a.name, [

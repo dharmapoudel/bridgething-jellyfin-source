@@ -57,7 +57,7 @@ export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & 
     if (tracks?.length) void player.playQueue(tracks, 0, shuffle);
   };
 
-  const headerArt = tracks?.[0] && params.kind !== 'album' ? (art?.trackArt(tracks[0], 400) ?? null) : null;
+  const headerArt = tracks?.[0] && params.kind !== 'album' ? (art?.trackArt(tracks[0], 300) ?? null) : null;
 
   return (
     <div className="flex h-full flex-col">
