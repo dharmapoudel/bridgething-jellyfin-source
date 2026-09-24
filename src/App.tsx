@@ -68,6 +68,9 @@ export default function App() {
   const view = stack[stack.length - 1];
   const viewRef = useRef(view);
   viewRef.current = view;
+  // Where the mini player was opened from; the Now Playing screen
+  // minimizes back here (its nav replaces the stack, so back() can't).
+  const returnViewRef = useRef<View>({ name: 'home' });
 
   const load = useCallback(async () => {
     setCredsState('loading');
@@ -137,9 +140,23 @@ export default function App() {
 
   const nav = useCallback((v: View) => {
     // bottom-nav destinations replace the stack; drill-ins push
+    const cur = viewRef.current;
+    // The stack is replaced (not pushed) when opening Now Playing, so
+    // remember where the mini player was tapped to minimize back to it.
+    if (
+      v.name === 'nowplaying' &&
+      cur.name !== 'nowplaying' &&
+      (cur.name === 'home' || cur.name === 'library' || cur.name === 'queue')
+    ) {
+      returnViewRef.current = cur;
+    }
     const isRoot = v.name === 'home' || v.name === 'library' || v.name === 'queue' || v.name === 'nowplaying';
     setStack(prev => (isRoot ? [v] : [...prev, v]));
   }, []);
+
+  const minimizeNowPlaying = useCallback(() => {
+    nav(returnViewRef.current);
+  }, [nav]);
 
   const back = useCallback(() => {
     setStack(prev => (prev.length > 1 ? prev.slice(0, -1) : prev));
@@ -184,7 +201,10 @@ export default function App() {
     const onKey = (e: KeyboardEvent): void => {
       const v = viewRef.current;
       if (e.key === 'Escape') {
-        back();
+        // Now Playing has no stack history (its nav replaced the stack),
+        // so Escape minimizes it instead of popping.
+        if (v.name === 'nowplaying') minimizeNowPlaying();
+        else back();
         return;
       }
       if (e.key === 'm' || e.key === 'M') {
@@ -210,7 +230,7 @@ export default function App() {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('wheel', onWheel);
     };
-  }, [back, nav, nudgeVolume]);
+  }, [back, minimizeNowPlaying, nav, nudgeVolume]);
 
   const artResolver: ArtResolver | null = useMemo(
     () =>
@@ -248,7 +268,7 @@ export default function App() {
       case 'queue':
         return <Queue {...props} />;
       case 'nowplaying':
-        return <NowPlaying {...props} />;
+        return <NowPlaying {...props} onMinimize={minimizeNowPlaying} />;
       case 'setup':
         return <Setup {...props} onSaved={() => void load()} />;
     }

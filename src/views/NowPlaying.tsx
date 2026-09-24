@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { getClient } from '../client';
+import { useEffect, useRef, useState, type TouchEvent as RTouchEvent } from 'react';
 import { Icon, IconBtn, ProgressBar, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
 import type { JellyfinClient, LyricLineVM } from '../jellyfin';
 import { player } from '../player';
@@ -122,7 +121,7 @@ function LyricsPanel({
   if (lyrics.state === 'none') {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-8 text-center">
-        <Icon name="mix" size={64} className="text-white/20" />
+        <Icon name="mic" size={64} className="text-white/20" />
         <div className="text-2xl font-semibold text-white/70">No lyrics for this track</div>
         <div className="text-lg leading-snug text-white/40">
           Jellyfin shows lyrics embedded in the file's tags — rescan the library after tagging.
@@ -162,66 +161,8 @@ function Clock() {
   return <div className="text-lg text-white/60">{s}</div>;
 }
 
-// Volume slider. The daemon only takes absolute levels via setVolume;
-// drags are throttled so a long swipe doesn't flood the phone link.
-function VolumeSlider() {
-  usePlayer();
-  const trackRef = useRef<HTMLDivElement>(null);
-  const lastSent = useRef(0);
-  const level = player.volume ?? 0;
-
-  const send = (clientX: number, force: boolean): void => {
-    const el = trackRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const p = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
-    const now = Date.now();
-    if (!force && now - lastSent.current < 120) return;
-    lastSent.current = now;
-    player.volume = p; // optimistic; the daemon's VolumeChanged confirms
-    player.touch();
-    getClient()
-      .audio.setVolume({ level: p })
-      .catch(() => {});
-  };
-
-  return (
-    <div className="flex min-w-0 flex-1 items-center gap-3">
-      <Icon name="volDown" size={28} className="shrink-0 text-white/50" />
-      <div
-        ref={trackRef}
-        role="slider"
-        aria-label="Volume"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(level * 100)}
-        className="relative h-10 min-w-0 flex-1 cursor-pointer touch-none"
-        onPointerDown={e => {
-          (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-          send(e.clientX, true);
-        }}
-        onPointerMove={e => {
-          if (e.buttons > 0) send(e.clientX, false);
-        }}
-        onPointerUp={e => send(e.clientX, true)}
-      >
-        <div className="absolute top-1/2 right-0 left-0 h-1.5 -translate-y-1/2 rounded-full bg-white/20" />
-        <div
-          className="absolute top-1/2 left-0 h-1.5 -translate-y-1/2 rounded-full bg-amber-400"
-          style={{ width: `${level * 100}%` }}
-        />
-        <div
-          className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow"
-          style={{ left: `${level * 100}%` }}
-        />
-      </div>
-      <Icon name="volUp" size={28} className="shrink-0 text-white/50" />
-    </div>
-  );
-}
-
 // Right-hand info column: clock, title/artist, progress with times,
-// transport, volume — the Spotify Car Thing arrangement from the mock.
+// transport, favorite + lyrics — the Spotify Car Thing arrangement.
 function InfoPanel({
   isFavorite,
   onToggleFav,
@@ -252,28 +193,8 @@ function InfoPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#14161c] px-6 py-4">
-      <div className="flex shrink-0 items-center justify-between">
+      <div className="flex shrink-0 items-center justify-start">
         <Clock />
-        <div className="flex items-center">
-          <IconBtn
-            size={52}
-            label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-            active={isFavorite}
-            onClick={onToggleFav}
-          >
-            <Icon name={isFavorite ? 'heartFill' : 'heart'} size={24} />
-          </IconBtn>
-          {lyricsSupported !== false ? (
-            <IconBtn
-              size={52}
-              label={lyricsTab ? 'Hide lyrics' : 'Show lyrics'}
-              active={lyricsTab}
-              onClick={onToggleLyrics}
-            >
-              <Icon name="mix" size={24} />
-            </IconBtn>
-          ) : null}
-        </div>
       </div>
 
       <div className="mt-1 min-w-0 shrink-0">
@@ -310,8 +231,25 @@ function InfoPanel({
         </IconBtn>
       </div>
 
-      <div className="mt-auto flex shrink-0 items-center pt-2">
-        <VolumeSlider />
+      <div className="mt-auto flex shrink-0 items-center justify-center gap-6 pt-2">
+        <IconBtn
+          size={56}
+          label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          active={isFavorite}
+          onClick={onToggleFav}
+        >
+          <Icon name={isFavorite ? 'heartFill' : 'heart'} size={26} />
+        </IconBtn>
+        {lyricsSupported !== false ? (
+          <IconBtn
+            size={56}
+            label={lyricsTab ? 'Hide lyrics' : 'Show lyrics'}
+            active={lyricsTab}
+            onClick={onToggleLyrics}
+          >
+            <Icon name="mic" size={26} />
+          </IconBtn>
+        ) : null}
       </div>
 
       {player.error ? (
@@ -323,7 +261,7 @@ function InfoPanel({
   );
 }
 
-export default function NowPlaying({ jf, nav }: ViewProps) {
+export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMinimize: () => void }) {
   usePlayer();
   const art = useArt();
   const portrait = usePortrait();
@@ -331,6 +269,41 @@ export default function NowPlaying({ jf, nav }: ViewProps) {
   const [lyricsSupported, setLyricsSupported] = useState<boolean | null>(null);
   const t = player.current();
   const trackId = t?.id;
+  const artPanelRef = useRef<HTMLDivElement>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  // While lyrics are showing, the screen is in active use even though the
+  // user isn't touching it. The Glass Overlay bundle is injected into this
+  // same document and raises its ambient screen after N seconds with no
+  // input events, so emit a quiet synthetic pointermove well inside its
+  // minimum idle window (15s) to keep the lyrics on screen.
+  useEffect(() => {
+    if (!lyricsTab) return;
+    const id = window.setInterval(() => {
+      document.dispatchEvent(new Event('pointermove', { bubbles: true }));
+    }, 8000);
+    return () => window.clearInterval(id);
+  }, [lyricsTab]);
+
+  // A swipe down starting near the top edge minimizes back to the mini
+  // player. Touches inside the lyrics panel are left alone so the lyrics
+  // keep scrolling instead of minimizing.
+  const onTouchStart = (e: RTouchEvent): void => {
+    const p = e.touches[0];
+    touchStart.current = { x: p.clientX, y: p.clientY };
+  };
+  const onTouchEnd = (e: RTouchEvent): void => {
+    const s = touchStart.current;
+    touchStart.current = null;
+    if (!s) return;
+    const p = e.changedTouches[0];
+    const dy = p.clientY - s.y;
+    const dx = p.clientX - s.x;
+    if (lyricsTab && artPanelRef.current?.contains(e.target as Node)) return;
+    if (s.y < window.innerHeight * 0.3 && dy > 70 && Math.abs(dx) < 60) {
+      onMinimize();
+    }
+  };
 
   // Full-bleed artwork for the hero panel, served from the shared blob cache.
   const { url: heroArt } = useCachedArt(t ? (art?.trackArt(t, 800) ?? null) : null);
@@ -405,8 +378,8 @@ export default function NowPlaying({ jf, nav }: ViewProps) {
 
   if (portrait) {
     return (
-      <div className="flex h-full flex-col">
-        <div className="w-full shrink-0 overflow-hidden" style={{ height: '48%' }}>
+      <div className="flex h-full flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div ref={artPanelRef} className="w-full shrink-0 overflow-hidden" style={{ height: '48%' }}>
           {artPanel}
         </div>
         <div className="min-h-0 flex-1">{infoPanel}</div>
@@ -415,8 +388,10 @@ export default function NowPlaying({ jf, nav }: ViewProps) {
   }
 
   return (
-    <div className="flex h-full">
-      <div className="h-full w-[55%] shrink-0 overflow-hidden">{artPanel}</div>
+    <div className="flex h-full" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div ref={artPanelRef} className="h-full w-[55%] shrink-0 overflow-hidden">
+        {artPanel}
+      </div>
       <div className="h-full min-w-0 flex-1">{infoPanel}</div>
     </div>
   );
