@@ -1,3 +1,7 @@
+## 0.1.20
+
+- Theme is now golden + green instead of yellow: rich gold (#d2a02e) for controls, progress, selections and the active lyric line; green (#34d399) for "alive" states — the bottom-nav active tab, now-playing highlights in the queue and track rows, the Home now-playing strip, and the mini-player progress ring.
+
 ## 0.1.19
 
 - The Library screen no longer has the "Library" top bar with the back arrow — the Albums / Artists / Playlists / Genres row now sits at the top (the bottom tabs already handle navigation).

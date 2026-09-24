@@ -1,9 +1,16 @@
 @import "tailwindcss";
 
-/* Finch theme: near-black surfaces, warm amber accent. System font stack
+/* Finch theme: near-black surfaces, golden primary accent, green for
+   "alive" states (now playing, active tab, progress ring). System font stack
    keeps the bundle lean; Noto Sans Devanagari is bundled for lyrics and
    titles in Devanagari script (Nepali library) — the device ships no
    Devanagari font, so without this they render as tofu blocks. */
+
+@theme {
+  --color-gold: #d2a02e;
+  --color-goldlight: #f0cd6e;
+  --color-leaf: #34d399;
+}
 
 @font-face {
   font-family: "Noto Sans Devanagari";

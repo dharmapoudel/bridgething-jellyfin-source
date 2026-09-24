@@ -250,7 +250,7 @@ export default function App() {
     if (credsState === 'loading') {
       return (
         <div className="flex h-full items-center justify-center">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/15 border-t-amber-400" />
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/15 border-t-gold" />
         </div>
       );
     }
@@ -301,7 +301,7 @@ export default function App() {
                   type="button"
                   onClick={() => nav(item.view)}
                   className={`flex flex-1 flex-col items-center justify-center gap-1 ${
-                    active ? 'text-amber-300' : 'text-white/55 active:bg-white/10'
+                    active ? 'text-leaf' : 'text-white/55 active:bg-white/10'
                   }`}
                 >
                   <Icon name={item.icon} size={30} />

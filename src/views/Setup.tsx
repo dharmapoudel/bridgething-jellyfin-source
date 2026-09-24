@@ -143,7 +143,7 @@ export default function Setup({ onSaved }: ViewProps & { onSaved: () => void }) 
         {qcCode ? (
           <div className="mb-4 rounded-2xl bg-white/8 p-5 text-center">
             <div className="mb-2 text-lg text-white/60">Enter this code in Jellyfin</div>
-            <div className="mb-3 text-6xl font-bold tracking-[0.3em] text-amber-300">{qcCode}</div>
+            <div className="mb-3 text-6xl font-bold tracking-[0.3em] text-goldlight">{qcCode}</div>
             <div className="text-lg leading-relaxed text-white/60">
               In Jellyfin, open your user menu → Quick Connect (or a Jellyfin app's settings → Quick Connect),
               type the code, and approve it.
@@ -172,7 +172,7 @@ export default function Setup({ onSaved }: ViewProps & { onSaved: () => void }) 
             type="button"
             disabled={busy || !server}
             onClick={startQuickConnect}
-            className="flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-amber-400 text-2xl font-bold text-black active:bg-amber-300 disabled:opacity-50"
+            className="flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-gold text-2xl font-bold text-black active:bg-goldlight disabled:opacity-50"
           >
             {busy ? (
               <span className="h-8 w-8 animate-spin rounded-full border-4 border-black/20 border-t-black" />

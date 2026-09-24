@@ -263,7 +263,7 @@ export function IconBtn({
         onClick();
       }}
       className={`flex shrink-0 items-center justify-center rounded-full transition-colors ${
-        active ? 'bg-amber-400 text-black' : 'text-white/85 active:bg-white/15'
+        active ? 'bg-gold text-black' : 'text-white/85 active:bg-white/15'
       } ${disabled ? 'opacity-30' : ''}`}
       style={{ width: size, height: size }}
     >
@@ -289,7 +289,7 @@ export function TopBar({ title, onBack, right }: { title: string; onBack?: () =>
 export function Spinner({ label = 'Loading…' }: { label?: string }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 text-white/50">
-      <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/15 border-t-amber-400" />
+      <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/15 border-t-gold" />
       <div className="text-xl">{label}</div>
     </div>
   );
@@ -309,7 +309,7 @@ export function AuthError({ text, onReconnect }: { text: string; onReconnect: ()
       <button
         type="button"
         onClick={onReconnect}
-        className="rounded-2xl bg-amber-400 px-8 py-4 text-xl font-bold text-black active:bg-amber-300"
+        className="rounded-2xl bg-gold px-8 py-4 text-xl font-bold text-black active:bg-goldlight"
       >
         Reconnect
       </button>
@@ -375,7 +375,7 @@ export function TrackRow({
   const active = player.current()?.id === track.id;
   return (
     <div
-      className={`flex min-h-16 items-center gap-3 rounded-xl px-2 py-2 ${active ? 'bg-amber-400/10' : 'active:bg-white/8'}`}
+      className={`flex min-h-16 items-center gap-3 rounded-xl px-2 py-2 ${active ? 'bg-leaf/10' : 'active:bg-white/8'}`}
     >
       <button type="button" onClick={onPlay} className="flex min-w-0 flex-1 items-center gap-3 text-left">
         {showArt ? (
@@ -384,7 +384,7 @@ export function TrackRow({
           <span className="w-10 shrink-0 text-center text-xl text-white/40">{indexLabel}</span>
         ) : null}
         <span className="min-w-0 flex-1">
-          <span className={`block truncate text-xl leading-tight ${active ? 'text-amber-300' : ''}`}>
+          <span className={`block truncate text-xl leading-tight ${active ? 'text-leaf' : ''}`}>
             {track.name}
           </span>
           <span className="block truncate text-base leading-tight text-white/50">
@@ -446,7 +446,7 @@ export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
         <span className="block truncate text-base leading-tight text-white/50">{t.artist}</span>
       </span>
       {player.loading ? (
-        <span className="h-8 w-8 animate-spin rounded-full border-3 border-white/15 border-t-amber-400" />
+        <span className="h-8 w-8 animate-spin rounded-full border-3 border-white/15 border-t-gold" />
       ) : (
         <span className="relative flex h-16 w-16 shrink-0 items-center justify-center text-white/90">
           <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
@@ -456,7 +456,7 @@ export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
               cy="32"
               r="28"
               fill="none"
-              stroke="#fbbf24"
+              stroke="#34d399"
               strokeWidth="5"
               strokeLinecap="round"
               strokeDasharray={ringLen}
@@ -518,10 +518,10 @@ export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
         }}
       >
         <div className="absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-white/15">
-          <div className="h-full rounded-full bg-amber-400" style={{ width: `${ratio * 100}%` }} />
+          <div className="h-full rounded-full bg-gold" style={{ width: `${ratio * 100}%` }} />
         </div>
         <div
-          className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-300 shadow"
+          className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-goldlight shadow"
           style={{ left: `${ratio * 100}%` }}
         />
       </div>

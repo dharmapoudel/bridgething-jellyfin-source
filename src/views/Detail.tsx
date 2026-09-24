@@ -84,7 +84,7 @@ export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & 
               <button
                 type="button"
                 onClick={() => playAll(false)}
-                className="flex h-18 shrink-0 items-center gap-2 rounded-full bg-amber-400 px-6 text-2xl font-bold text-black active:bg-amber-300"
+                className="flex h-18 shrink-0 items-center gap-2 rounded-full bg-gold px-6 text-2xl font-bold text-black active:bg-goldlight"
               >
                 <Icon name="play" size={30} /> Play
               </button>

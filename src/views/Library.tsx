@@ -75,7 +75,7 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
             type="button"
             onClick={() => setTab(t.id)}
             className={`h-14 shrink-0 rounded-full px-6 text-xl font-medium ${
-              tab === t.id ? 'bg-amber-400 text-black' : 'bg-white/10 text-white/80 active:bg-white/20'
+              tab === t.id ? 'bg-gold text-black' : 'bg-white/10 text-white/80 active:bg-white/20'
             }`}
           >
             {t.label}

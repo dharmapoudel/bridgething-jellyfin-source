@@ -70,7 +70,7 @@ function SyncedLyrics({ lines }: { lines: LyricLineVM[] }) {
             }}
             onClick={() => void player.seekTo(l.startMs)}
             className={`block w-full rounded-2xl px-4 py-3 text-center transition-colors active:bg-white/10 ${
-              isActive ? 'text-3xl font-bold text-amber-300' : 'text-2xl font-medium text-white/45'
+              isActive ? 'text-3xl font-bold text-goldlight' : 'text-2xl font-medium text-white/45'
             }`}
           >
             {l.text}
@@ -330,7 +330,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
         <button
           type="button"
           onClick={() => nav({ name: 'home' })}
-          className="h-18 rounded-full bg-amber-400 px-8 text-2xl font-bold text-black active:bg-amber-300"
+          className="h-18 rounded-full bg-gold px-8 text-2xl font-bold text-black active:bg-goldlight"
         >
           Browse your library
         </button>

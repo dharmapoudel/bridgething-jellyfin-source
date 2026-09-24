@@ -27,10 +27,10 @@ export default function Queue({ back }: ViewProps) {
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {current ? (
-          <div className="mb-2 flex items-center gap-3 rounded-2xl bg-amber-400/10 p-2">
+          <div className="mb-2 flex items-center gap-3 rounded-2xl bg-leaf/10 p-2">
             <Artwork src={art?.trackArt(current, 200) ?? null} size={56} rounded="rounded-lg" label={current.album} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xl font-medium text-amber-200">{current.name}</div>
+              <div className="truncate text-xl font-medium text-leaf">{current.name}</div>
               <div className="truncate text-base text-white/50">Now playing · {current.artist}</div>
             </div>
             <IconBtn size={56} label={player.intentPlaying ? 'Pause' : 'Play'} onClick={() => void player.toggle()}>

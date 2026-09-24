@@ -45,7 +45,7 @@ function Rail({ title, onSeeAll, children }: { title: string; onSeeAll?: () => v
       <div className="mb-2 flex items-center justify-between px-4">
         <h2 className="text-2xl font-semibold">{title}</h2>
         {onSeeAll ? (
-          <button type="button" onClick={onSeeAll} className="rounded-full px-4 py-2 text-lg text-amber-300 active:bg-white/10">
+          <button type="button" onClick={onSeeAll} className="rounded-full px-4 py-2 text-lg text-goldlight active:bg-white/10">
             See all
           </button>
         ) : null}
@@ -95,9 +95,9 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
             <button
               type="button"
               onClick={startResume}
-              className="flex w-full items-center gap-4 rounded-2xl bg-amber-400/15 p-4 text-left active:bg-amber-400/25"
+              className="flex w-full items-center gap-4 rounded-2xl bg-leaf/15 p-4 text-left active:bg-leaf/25"
             >
-              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-amber-400 text-black">
+              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-leaf text-black">
                 <Icon name="play" size={34} />
               </span>
               <span className="min-w-0 flex-1">
