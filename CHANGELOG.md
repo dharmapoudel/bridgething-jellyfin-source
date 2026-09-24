@@ -1,3 +1,7 @@
+## 0.1.21
+
+- Buttons are now green instead of gold: play/pause, the active library pill, all CTA buttons and the connect button use the green accent (pressed state darkens). The progress bar and knob stay gold so the theme keeps both colors.
+
 ## 0.1.20
 
 - Theme is now golden + green instead of yellow: rich gold (#d2a02e) for controls, progress, selections and the active lyric line; green (#34d399) for "alive" states — the bottom-nav active tab, now-playing highlights in the queue and track rows, the Home now-playing strip, and the mini-player progress ring.

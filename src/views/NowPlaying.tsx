@@ -330,7 +330,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
         <button
           type="button"
           onClick={() => nav({ name: 'home' })}
-          className="h-18 rounded-full bg-gold px-8 text-2xl font-bold text-black active:bg-goldlight"
+          className="h-18 rounded-full bg-leaf px-8 text-2xl font-bold text-black active:brightness-90"
         >
           Browse your library
         </button>

@@ -263,7 +263,7 @@ export function IconBtn({
         onClick();
       }}
       className={`flex shrink-0 items-center justify-center rounded-full transition-colors ${
-        active ? 'bg-gold text-black' : 'text-white/85 active:bg-white/15'
+        active ? 'bg-leaf text-black' : 'text-white/85 active:bg-white/15'
       } ${disabled ? 'opacity-30' : ''}`}
       style={{ width: size, height: size }}
     >
@@ -309,7 +309,7 @@ export function AuthError({ text, onReconnect }: { text: string; onReconnect: ()
       <button
         type="button"
         onClick={onReconnect}
-        className="rounded-2xl bg-gold px-8 py-4 text-xl font-bold text-black active:bg-goldlight"
+        className="rounded-2xl bg-leaf px-8 py-4 text-xl font-bold text-black active:brightness-90"
       >
         Reconnect
       </button>

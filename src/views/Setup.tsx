@@ -172,7 +172,7 @@ export default function Setup({ onSaved }: ViewProps & { onSaved: () => void }) 
             type="button"
             disabled={busy || !server}
             onClick={startQuickConnect}
-            className="flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-gold text-2xl font-bold text-black active:bg-goldlight disabled:opacity-50"
+            className="flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-leaf text-2xl font-bold text-black active:brightness-90 disabled:opacity-50"
           >
             {busy ? (
               <span className="h-8 w-8 animate-spin rounded-full border-4 border-black/20 border-t-black" />
