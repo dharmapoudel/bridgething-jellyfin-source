@@ -8,7 +8,13 @@
 
 import { getClient } from './client';
 
-export const FINCH_VERSION = '0.1.5';
+export const FINCH_VERSION = '0.1.6';
+
+// Trailing slashes turn every path into a double-slash (//Users/...) which
+// some servers and reverse proxies reject — strip them once, up front.
+export function normalizeServer(raw: string): string {
+  return raw.trim().replace(/\/+$/, '');
+}
 
 export interface Creds {
   server: string;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getClient } from '../client';
 import { Icon, TopBar } from '../components';
-import { quickConnectAuthenticate, quickConnectInitiate, quickConnectPoll } from '../jellyfin';
+import { normalizeServer, quickConnectAuthenticate, quickConnectInitiate, quickConnectPoll } from '../jellyfin';
 import type { ViewProps } from '../nav';
 
 export const CREDS_KEY = 'finch:creds';
@@ -46,10 +46,17 @@ export default function Setup({ onSaved }: ViewProps & { onSaved: () => void }) 
     return stopPoll;
   }, []);
 
-  const qcFail = (e: unknown): string => {
+  const qcFail = (srv: string, e: unknown): string => {
     const msg = e instanceof Error ? e.message : 'Quick Connect failed.';
     if (/\b404\b/.test(msg)) {
       return 'This server does not support Quick Connect (needs Jellyfin 10.8+ with Quick Connect enabled).';
+    }
+    if (/\b400\b/.test(msg)) {
+      return (
+        `Jellyfin refused the request (400) at ${srv}/QuickConnect/Initiate. ` +
+        'Double-check the server URL is exactly right, and if you reach Jellyfin through a reverse proxy, ' +
+        'make sure it passes API requests through untouched.'
+      );
     }
     return msg;
   };
@@ -59,10 +66,11 @@ export default function Setup({ onSaved }: ViewProps & { onSaved: () => void }) 
       setStatus('Enter the server URL in the Finch settings on your phone first.');
       return;
     }
+    const srv = normalizeServer(server);
     setBusy(true);
     setStatus('Asking Jellyfin for a code…');
     try {
-      const session = await quickConnectInitiate(server);
+      const session = await quickConnectInitiate(srv);
       setQcCode(session.code);
       setStatus('Enter this code in Jellyfin to link Finch.');
       setBusy(false);
@@ -73,11 +81,11 @@ export default function Setup({ onSaved }: ViewProps & { onSaved: () => void }) 
         void (async () => {
           tries += 1;
           try {
-            if (await quickConnectPoll(server, session.secret)) {
+            if (await quickConnectPoll(srv, session.secret)) {
               stopPoll();
               setStatus('Code approved — finishing sign-in…');
-              const { apiKey: token, userId, userName } = await quickConnectAuthenticate(server, session.secret);
-              await saveCredsToStore({ server, apiKey: token, userId, userName });
+              const { apiKey: token, userId, userName } = await quickConnectAuthenticate(srv, session.secret);
+              await saveCredsToStore({ server: srv, apiKey: token, userId, userName });
               setQcCode(null);
               setStatus(null);
               onSaved();
@@ -89,13 +97,13 @@ export default function Setup({ onSaved }: ViewProps & { onSaved: () => void }) 
           } catch (e) {
             stopPoll();
             setQcCode(null);
-            setStatus(qcFail(e));
+            setStatus(qcFail(srv, e));
           }
         })();
       }, 3000);
     } catch (e) {
       setBusy(false);
-      setStatus(qcFail(e));
+      setStatus(qcFail(srv, e));
     }
   };
 
