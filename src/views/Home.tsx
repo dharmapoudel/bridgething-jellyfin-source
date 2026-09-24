@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions, trackActions } from '../actions';
 import { cached } from '../cache';
-import { AuthError, Empty, Icon, Spinner, Tile, TopBar, TrackRow, useArt, warmArt, type MenuAction } from '../components';
+import { AuthError, Empty, Icon, Spinner, Tile, TrackRow, useArt, warmArt, type MenuAction } from '../components';
 import { player, type PersistedQueue } from '../player';
 import { isAuthError, type Album, type Playlist, type Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
@@ -89,9 +89,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
   const menuFor = (t: Track): MenuAction[] => trackActions(t, jf, nav);
 
   return (
-    <div className="flex h-full flex-col">
-      <TopBar title="Finch" />
-      <div className="min-h-0 flex-1 overflow-y-auto py-4">
+    <div className="h-full overflow-y-auto py-4">
         {resume && player.current() === null ? (
           <section className="mb-6 px-4">
             <button
@@ -191,7 +189,6 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
             ))}
           </Rail>
         ) : null}
-      </div>
     </div>
   );
 }

@@ -15,7 +15,6 @@ const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | '
   { view: { name: 'home' }, icon: 'home', label: 'Home' },
   { view: { name: 'library', tab: 'albums' }, icon: 'library', label: 'Library' },
   { view: { name: 'queue' }, icon: 'queue', label: 'Queue' },
-  { view: { name: 'nowplaying' }, icon: 'note', label: 'Playing' },
 ];
 
 async function readCreds(): Promise<Creds | null> {
