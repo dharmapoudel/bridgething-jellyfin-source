@@ -1,3 +1,7 @@
+## 0.1.23
+
+- New app icon: simplified singing-finch head (crest reduced to two subtle feathers) in gold line-art with a fully transparent background — no more navy square, so the hub tile no longer trims it into a squircle. 512x512 RGBA PNG at 34.7KB, under the daemon 64KB cap.
+
 ## 0.1.22
 
 - New app icon: the approved singing-finch head — short upward finch beak, bold swept-back crest, music note — in gold line-art on the dark navy background, full-bleed square, 256-color PNG at 17.8KB (well under the daemon 64KB cap).
