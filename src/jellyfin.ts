@@ -1,9 +1,14 @@
 // Jellyfin REST client. Every call tunnels through the phone via
 // client.net.fetch, so it works with no CORS and away from home as long as
-// the phone can reach the server. Auth rides in the api_key query param,
-// because the tunnel sends no custom headers for us.
+// the phone can reach the server. Auth rides three ways on every request:
+// the api_key query param (required for stream and image URLs, where no
+// headers can be sent), the X-Emby-Token header, and the official
+// X-Emby-Authorization header with the token embedded — whichever the
+// server/proxy stack honors wins.
 
 import { getClient } from './client';
+
+export const FINCH_VERSION = '0.1.3';
 
 export interface Creds {
   server: string;
@@ -144,6 +149,32 @@ const FETCH_TIMEOUT_MS = 15_000;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+// Stable device id shared with the playback engine (player.ts uses the same
+// store key). Sent in the X-Emby-Authorization header.
+const DEVICE_ID_KEY = 'finch:device-id';
+let deviceIdCache: string | null = null;
+
+export async function finchDeviceId(): Promise<string> {
+  if (deviceIdCache) return deviceIdCache;
+  const client = getClient();
+  try {
+    const r = await client.store.get({ key: DEVICE_ID_KEY });
+    if (r.ok && r.response.value) {
+      deviceIdCache = r.response.value;
+      return deviceIdCache;
+    }
+  } catch {
+    // fall through to generate
+  }
+  deviceIdCache = crypto.randomUUID();
+  try {
+    await client.store.put({ key: DEVICE_ID_KEY, value: deviceIdCache });
+  } catch {
+    // non-fatal
+  }
+  return deviceIdCache;
+}
+
 function cleanServer(s: string): string {
   return s.trim().replace(/\/+$/, '');
 }
@@ -215,11 +246,21 @@ export class JellyfinClient {
     body?: unknown,
   ): Promise<T> {
     const client = getClient();
-    // Auth rides two ways: the api_key query param (required for stream and
-    // image URLs, where no headers can be sent) AND the X-Emby-Token header
-    // (Jellyfin's canonical header auth — survives any proxy or HTTP stack
-    // that mangles query strings).
-    const headers = [{ name: 'X-Emby-Token', value: this.creds.apiKey }];
+    // Auth rides three ways: the api_key query param (required for stream and
+    // image URLs, where no headers can be sent), the X-Emby-Token header, and
+    // the official X-Emby-Authorization header with the token embedded
+    // (Jellyfin's canonical form — survives any proxy or HTTP stack that
+    // mangles query strings or drops unknown headers).
+    const deviceId = await finchDeviceId();
+    const headers = [
+      { name: 'X-Emby-Token', value: this.creds.apiKey },
+      {
+        name: 'X-Emby-Authorization',
+        value:
+          `MediaBrowser Client="Finch", Device="Car Thing", DeviceId="${deviceId}", ` +
+          `Version="${FINCH_VERSION}", Token="${this.creds.apiKey}"`,
+      },
+    ];
     if (body) headers.push({ name: 'Content-Type', value: 'application/json' });
     const res = await client.net.fetch({
       request: {
@@ -488,7 +529,16 @@ export async function testConnection(server: string, apiKey: string): Promise<{ 
   const clean = cleanServer(server);
   const key = apiKey.trim();
   const client = getClient();
-  const headers = [{ name: 'X-Emby-Token', value: key }];
+  const deviceId = await finchDeviceId();
+  const headers = [
+    { name: 'X-Emby-Token', value: key },
+    {
+      name: 'X-Emby-Authorization',
+      value:
+        `MediaBrowser Client="Finch", Device="Car Thing", DeviceId="${deviceId}", ` +
+        `Version="${FINCH_VERSION}", Token="${key}"`,
+    },
+  ];
   const res = await client.net.fetch({
     request: {
       url: `${clean}/System/Info?api_key=${encodeURIComponent(key)}`,
@@ -521,4 +571,66 @@ export async function testConnection(server: string, apiKey: string): Promise<{ 
   const users = JSON.parse(dec.decode(usersRes.response.response.body)) as { Id: string; Name: string }[];
   if (!users.length) throw new JellyfinError(0, 'connected, but the server returned no users');
   return { userId: users[0].Id, userName: users[0].Name };
+}
+
+// ---- Quick Connect -------------------------------------------------------
+// Jellyfin's device-linking flow: the device asks for a code (no auth
+// needed), the user types it into Jellyfin (user menu → Quick Connect, or a
+// Jellyfin app's settings), approves it, and the device trades the secret
+// for a real access token + user id. Nothing to type on the Car Thing.
+
+export interface QuickConnectSession {
+  secret: string;
+  code: string;
+}
+
+async function qcFetch<T>(server: string, path: string, body?: unknown): Promise<T> {
+  const clean = cleanServer(server);
+  const client = getClient();
+  const headers: { name: string; value: string }[] = [];
+  if (body) headers.push({ name: 'Content-Type', value: 'application/json' });
+  const res = await client.net.fetch({
+    request: {
+      url: `${clean}${path}`,
+      method: body ? 'POST' : 'GET',
+      headers,
+      body: body ? enc.encode(JSON.stringify(body)) : null,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      redirect: 'follow',
+    },
+  });
+  if (!res.ok) throw new JellyfinError(0, 'could not reach the server; check the URL and that the phone has network');
+  const r = res.response.response;
+  if (r.status >= 400) throw new JellyfinError(r.status, `server error ${r.status}`);
+  return JSON.parse(dec.decode(r.body)) as T;
+}
+
+// Step 1: get a secret + the 6-digit code to show the user. Needs no auth.
+export function quickConnectInitiate(server: string): Promise<QuickConnectSession> {
+  return qcFetch<QuickConnectSession>(server, '/QuickConnect/Initiate');
+}
+
+// Step 2: poll until the user approves the code in Jellyfin.
+export async function quickConnectPoll(server: string, secret: string): Promise<boolean> {
+  const data = await qcFetch<{ Authenticated?: boolean }>(
+    server,
+    `/QuickConnect/Connect?Secret=${encodeURIComponent(secret)}`,
+  );
+  return data.Authenticated === true;
+}
+
+// Step 3: trade the approved secret for an access token + user.
+export async function quickConnectAuthenticate(
+  server: string,
+  secret: string,
+): Promise<{ apiKey: string; userId: string; userName: string }> {
+  const data = await qcFetch<{ AccessToken?: string; User?: { Id?: string; Name?: string } }>(
+    server,
+    '/QuickConnect/Authenticate',
+    { Secret: secret },
+  );
+  if (!data.AccessToken || !data.User?.Id) {
+    throw new JellyfinError(0, 'the server did not return a token — approve the code in Jellyfin first.');
+  }
+  return { apiKey: data.AccessToken, userId: data.User.Id, userName: data.User.Name ?? 'Jellyfin user' };
 }

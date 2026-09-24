@@ -2,11 +2,11 @@
 // uses settings.fetch (the phone's network, no CORS) to talk to Jellyfin and
 // settings.config.set to hand the credentials to the Car Thing.
 import { settings } from '@bridgething/client/settings';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const APP_VERSION = '0.1.2';
+const APP_VERSION = '0.1.3';
 
 type Status = { kind: 'ok' | 'err' | 'info'; text: string } | null;
 
@@ -42,6 +42,8 @@ function Settings() {
   const [savedFor, setSavedFor] = useState('');
   const [status, setStatus] = useState<Status>(null);
   const [busy, setBusy] = useState(false);
+  const [qcCode, setQcCode] = useState<string | null>(null);
+  const qcTimer = useRef<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -57,6 +59,9 @@ function Settings() {
         setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'could not talk to the companion app' });
       }
     })();
+    return () => {
+      if (qcTimer.current !== null) window.clearInterval(qcTimer.current);
+    };
   }, []);
 
   const cleanServer = (s: string): string => s.trim().replace(/\/+$/, '');
@@ -117,6 +122,100 @@ function Settings() {
     }
   }
 
+  function stopQcPoll(): void {
+    if (qcTimer.current !== null) {
+      window.clearInterval(qcTimer.current);
+      qcTimer.current = null;
+    }
+  }
+
+  // Quick Connect: Jellyfin shows nothing to type on the device — the phone
+  // gets a 6-digit code, the user approves it in Jellyfin, and the phone
+  // trades it for a token. No auth is needed for these three calls.
+  async function startQuickConnect(): Promise<void> {
+    const srv = cleanServer(server);
+    if (!srv) {
+      setStatus({ kind: 'err', text: 'enter the server URL first.' });
+      return;
+    }
+    setBusy(true);
+    setStatus({ kind: 'info', text: 'asking Jellyfin for a code…' });
+    try {
+      const init = (await postJson(`${srv}/QuickConnect/Initiate`, {})) as { Secret: string; Code: string };
+      if (!init.Secret || !init.Code) throw new Error('the server did not return a Quick Connect code.');
+      setQcCode(init.Code);
+      
+      setBusy(false);
+      setStatus({ kind: 'info', text: 'enter the code in Jellyfin (user menu → Quick Connect) and approve it.' });
+      let tries = 0;
+      stopQcPoll();
+      qcTimer.current = window.setInterval(() => {
+        void (async () => {
+          tries += 1;
+          try {
+            const poll = (await getJson(
+              `${srv}/QuickConnect/Connect?Secret=${encodeURIComponent(init.Secret)}`,
+            )) as { Authenticated?: boolean };
+            if (poll.Authenticated === true) {
+              stopQcPoll();
+              setStatus({ kind: 'info', text: 'code approved — finishing sign-in…' });
+              const auth = (await postJson(`${srv}/QuickConnect/Authenticate`, { Secret: init.Secret })) as {
+                AccessToken: string;
+                User: { Id: string; Name: string };
+              };
+              if (!auth.AccessToken || !auth.User?.Id) throw new Error('the server did not return a token.');
+              await saveAll(srv, auth.AccessToken, auth.User.Id, auth.User.Name);
+              setQcCode(null);
+              
+              setStatus({
+                kind: 'ok',
+                text: `signed in as ${auth.User.Name} via Quick Connect. Finch on the Car Thing will pick this up.`,
+              });
+            } else if (tries >= 100) {
+              stopQcPoll();
+              setQcCode(null);
+              
+              setStatus({ kind: 'err', text: 'timed out waiting for approval. Tap “Get a code” to try again.' });
+            }
+          } catch (e) {
+            stopQcPoll();
+            setQcCode(null);
+            
+            setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'Quick Connect failed.' });
+          }
+        })();
+      }, 3000);
+    } catch (e) {
+      setBusy(false);
+      setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'Quick Connect failed.' });
+    }
+  }
+
+  function cancelQuickConnect(): void {
+    stopQcPoll();
+    setQcCode(null);
+    
+    setBusy(false);
+    setStatus(null);
+  }
+
+  async function signOut(): Promise<void> {
+    stopQcPoll();
+    setBusy(true);
+    try {
+      await settings.config.set('server_url', '');
+      await settings.config.set('api_key', '');
+      await settings.config.set('user_id', '');
+      setSavedFor('');
+      setApiKey('');
+      setStatus({ kind: 'info', text: 'signed out — saved credentials cleared.' });
+    } catch (e) {
+      setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'could not clear credentials.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main>
       <h1>Finch settings</h1>
@@ -155,6 +254,36 @@ function Settings() {
         <input id="apikey" value={apiKey} onChange={e => setApiKey(e.target.value)} autoCapitalize="off" autoCorrect="off" />
         <button type="button" className="primary" disabled={busy} onClick={connectWithKey}>
           Test &amp; save
+        </button>
+      </section>
+
+      <section>
+        <h2>Or link with Quick Connect</h2>
+        <p className="hint">
+          No typing passwords or keys: get a 6-digit code, enter it in Jellyfin (user menu → Quick Connect),
+          and approve it. Uses the server URL above.
+        </p>
+        {qcCode ? (
+          <div className="qc-code">
+            <div className="qc-label">Enter this code in Jellyfin</div>
+            <div className="qc-digits">{qcCode}</div>
+            <div className="hint">Waiting for approval…</div>
+            <button type="button" onClick={cancelQuickConnect}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="primary" disabled={busy} onClick={startQuickConnect}>
+            Get a code
+          </button>
+        )}
+      </section>
+
+      <section>
+        <h2>Sign out</h2>
+        <p className="hint">Clears the saved server URL and credentials from the Car Thing.</p>
+        <button type="button" disabled={busy} onClick={signOut}>
+          Sign out
         </button>
       </section>
 
