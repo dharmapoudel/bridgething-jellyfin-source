@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions } from '../actions';
 import { cached } from '../cache';
-import { Empty, Spinner, Tile, TopBar, useArt } from '../components';
+import { AuthError, Empty, Spinner, Tile, TopBar, useArt } from '../components';
 import { player } from '../player';
-import type { Album, Artist, Genre, Playlist } from '../jellyfin';
+import { isAuthError, type Album, type Artist, type Genre, type Playlist } from '../jellyfin';
 import type { LibTab, ViewProps } from '../nav';
 
 const TABS: { id: LibTab; label: string }[] = [
@@ -21,12 +21,14 @@ export default function Library({ jf, nav, back, openMenu, initialTab }: ViewPro
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
   const [genres, setGenres] = useState<Genre[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rawError, setRawError] = useState<unknown>(null);
 
   useEffect(() => setTab(initialTab), [initialTab]);
 
   useEffect(() => {
     let dead = false;
     setError(null);
+    setRawError(null);
     const load = async (): Promise<void> => {
       try {
         if (tab === 'albums' && !albums) setAlbums(await cached('lib:albums', () => jf.albums()));
@@ -34,7 +36,10 @@ export default function Library({ jf, nav, back, openMenu, initialTab }: ViewPro
         if (tab === 'playlists' && !playlists) setPlaylists(await cached('lib:playlists', () => jf.playlists()));
         if (tab === 'genres' && !genres) setGenres(await cached('lib:genres', () => jf.genres()));
       } catch (e) {
-        if (!dead) setError(e instanceof Error ? e.message : 'could not load');
+        if (!dead) {
+          setError(e instanceof Error ? e.message : 'could not load');
+          setRawError(e);
+        }
       }
     };
     void load();
@@ -71,7 +76,14 @@ export default function Library({ jf, nav, back, openMenu, initialTab }: ViewPro
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {error ? (
-          <Empty text={`Could not load the library: ${error}`} />
+          isAuthError(rawError) ? (
+            <AuthError
+              text="Jellyfin rejected the saved sign-in. Reconnect with Quick Connect or an API key."
+              onReconnect={() => nav({ name: 'setup' })}
+            />
+          ) : (
+            <Empty text={`Could not load the library: ${error}`} />
+          )
         ) : tab === 'albums' ? (
           albums ? (
             <div className="flex flex-wrap gap-4">

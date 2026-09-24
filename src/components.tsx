@@ -214,6 +214,24 @@ export function Empty({ text }: { text: string }) {
   return <div className="flex flex-1 items-center justify-center px-8 text-center text-xl text-white/40">{text}</div>;
 }
 
+// Shown when the server rejected the credentials: the error text plus a way
+// back to sign-in (Quick Connect / API key), since Setup is otherwise only
+// reachable when no credentials exist at all.
+export function AuthError({ text, onReconnect }: { text: string; onReconnect: () => void }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 text-center">
+      <div className="text-xl leading-relaxed text-white/60">{text}</div>
+      <button
+        type="button"
+        onClick={onReconnect}
+        className="rounded-2xl bg-amber-400 px-8 py-4 text-xl font-bold text-black active:bg-amber-300"
+      >
+        Reconnect
+      </button>
+    </div>
+  );
+}
+
 // ---- tiles & rows ----
 
 export function Tile({

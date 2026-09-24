@@ -30,20 +30,32 @@ async function readCreds(): Promise<Creds | null> {
       return null;
     }
   };
+  // Two sources can hold credentials: the phone's config (written by the
+  // settings page) and the device store (written by on-device Quick Connect
+  // / API-key setup). The newest sign-in wins; a newer-but-empty source
+  // means "signed out" and beats an older valid one.
   const server = await get('server_url');
   const apiKey = await get('api_key');
   const userId = await get('user_id');
-  if (server && apiKey && userId) return { server, apiKey, userId };
-  // on-device fallback: the setup view saves here
+  const configTs = Number((await get('creds_ts')) ?? 0) || 0;
+  const configValid = !!(server && apiKey && userId);
+
+  let storeCreds: StoredCreds | null = null;
   try {
     const r = await client.store.get({ key: CREDS_KEY });
     if (r.ok && r.response.value) {
       const s = JSON.parse(r.response.value) as StoredCreds;
-      if (s.server && s.apiKey && s.userId) return { server: s.server, apiKey: s.apiKey, userId: s.userId };
+      if (s.server && s.apiKey && s.userId) storeCreds = s;
     }
   } catch {
     // ignore
   }
+  const storeTs = storeCreds?.ts ?? 0;
+
+  if (storeTs > configTs && storeCreds) {
+    return { server: storeCreds.server, apiKey: storeCreds.apiKey, userId: storeCreds.userId };
+  }
+  if (configValid) return { server: server!, apiKey: apiKey!, userId: userId! };
   return null;
 }
 

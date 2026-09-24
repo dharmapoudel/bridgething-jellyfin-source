@@ -11,10 +11,12 @@ export interface StoredCreds {
   apiKey: string;
   userId: string;
   userName: string;
+  ts: number; // when these creds were saved — newest source wins in readCreds
 }
 
-export async function saveCredsToStore(c: StoredCreds): Promise<void> {
-  await getClient().store.put({ key: CREDS_KEY, value: JSON.stringify(c) });
+export async function saveCredsToStore(c: Omit<StoredCreds, 'ts'>): Promise<void> {
+  const withTs: StoredCreds = { ...c, ts: Date.now() };
+  await getClient().store.put({ key: CREDS_KEY, value: JSON.stringify(withTs) });
 }
 
 type Mode = 'key' | 'quick';
@@ -57,6 +59,14 @@ export default function Setup({ onSaved }: ViewProps & { onSaved: () => void }) 
     }
   };
 
+  const qcFail = (e: unknown): string => {
+    const msg = e instanceof Error ? e.message : 'Quick Connect failed.';
+    if (/\b404\b/.test(msg)) {
+      return 'This server does not support Quick Connect (needs Jellyfin 10.8+ with Quick Connect enabled). Use the API key instead.';
+    }
+    return msg;
+  };
+
   const startQuickConnect = async (): Promise<void> => {
     if (!server.trim()) {
       setStatus('Enter the server URL first.');
@@ -92,13 +102,13 @@ export default function Setup({ onSaved }: ViewProps & { onSaved: () => void }) 
           } catch (e) {
             stopPoll();
             setQcCode(null);
-            setStatus(e instanceof Error ? e.message : 'Quick Connect failed.');
+            setStatus(qcFail(e));
           }
         })();
       }, 3000);
     } catch (e) {
       setBusy(false);
-      setStatus(e instanceof Error ? e.message : 'Quick Connect failed.');
+      setStatus(qcFail(e));
     }
   };
 

@@ -8,7 +8,7 @@
 
 import { getClient } from './client';
 
-export const FINCH_VERSION = '0.1.3';
+export const FINCH_VERSION = '0.1.4';
 
 export interface Creds {
   server: string;
@@ -125,6 +125,12 @@ export class JellyfinError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+// True when the server rejected the credentials (as opposed to a network or
+// server error) — the UI uses this to offer a reconnect path.
+export function isAuthError(e: unknown): boolean {
+  return e instanceof JellyfinError && (e.status === 401 || e.status === 403);
 }
 
 interface RawItem {
@@ -606,8 +612,9 @@ async function qcFetch<T>(server: string, path: string, body?: unknown): Promise
 }
 
 // Step 1: get a secret + the 6-digit code to show the user. Needs no auth.
+// Initiate is POST-only on Jellyfin — the empty JSON body matters.
 export function quickConnectInitiate(server: string): Promise<QuickConnectSession> {
-  return qcFetch<QuickConnectSession>(server, '/QuickConnect/Initiate');
+  return qcFetch<QuickConnectSession>(server, '/QuickConnect/Initiate', {});
 }
 
 // Step 2: poll until the user approves the code in Jellyfin.

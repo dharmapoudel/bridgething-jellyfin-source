@@ -1,25 +1,34 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions, trackActions } from '../actions';
 import { cached } from '../cache';
-import { Empty, Icon, Spinner, Tile, TopBar, TrackRow, useArt, type MenuAction } from '../components';
+import { AuthError, Empty, Icon, Spinner, Tile, TopBar, TrackRow, useArt, type MenuAction } from '../components';
 import { player, type PersistedQueue } from '../player';
-import type { Album, Playlist, Track } from '../jellyfin';
+import { isAuthError, type Album, type Playlist, type Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
 
-function useLoad<T>(key: string | null, load: () => Promise<T>): { data: T | null; error: string | null } {
+function useLoad<T>(key: string | null, load: () => Promise<T>): {
+  data: T | null;
+  error: string | null;
+  rawError: unknown;
+} {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rawError, setRawError] = useState<unknown>(null);
   useEffect(() => {
     if (!key) return;
     let dead = false;
     setData(null);
     setError(null);
+    setRawError(null);
     cached(key, load).then(
       d => {
         if (!dead) setData(d);
       },
       (e: unknown) => {
-        if (!dead) setError(e instanceof Error ? e.message : 'could not load');
+        if (!dead) {
+          setError(e instanceof Error ? e.message : 'could not load');
+          setRawError(e);
+        }
       },
     );
     return () => {
@@ -27,7 +36,7 @@ function useLoad<T>(key: string | null, load: () => Promise<T>): { data: T | nul
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
-  return { data, error };
+  return { data, error, rawError };
 }
 
 function Rail({ title, onSeeAll, children }: { title: string; onSeeAll?: () => void; children: React.ReactNode }) {
@@ -122,7 +131,17 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
         </section>
 
         {recent.error || added.error || favs.error || playlists.error ? (
-          <Empty text="Could not reach Jellyfin. Check the server URL and API key in settings." />
+          isAuthError(recent.rawError) ||
+          isAuthError(added.rawError) ||
+          isAuthError(favs.rawError) ||
+          isAuthError(playlists.rawError) ? (
+            <AuthError
+              text="Jellyfin rejected the saved sign-in. Reconnect with Quick Connect or an API key."
+              onReconnect={() => nav({ name: 'setup' })}
+            />
+          ) : (
+            <Empty text="Could not reach Jellyfin. Check the server URL and API key in settings." />
+          )
         ) : null}
 
         {recent.data ? (

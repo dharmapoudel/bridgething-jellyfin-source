@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const APP_VERSION = '0.1.3';
+const APP_VERSION = '0.1.4';
 
 type Status = { kind: 'ok' | 'err' | 'info'; text: string } | null;
 
@@ -70,6 +70,7 @@ function Settings() {
     await settings.config.set('server_url', serverUrl);
     await settings.config.set('api_key', token);
     await settings.config.set('user_id', userId);
+    await settings.config.set('creds_ts', String(Date.now()));
     setSavedFor(`${userName} @ ${serverUrl}`);
   }
 
@@ -181,13 +182,13 @@ function Settings() {
             stopQcPoll();
             setQcCode(null);
             
-            setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'Quick Connect failed.' });
+            setStatus({ kind: 'err', text: qcError(e) });
           }
         })();
       }, 3000);
     } catch (e) {
       setBusy(false);
-      setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'Quick Connect failed.' });
+      setStatus({ kind: 'err', text: qcError(e) });
     }
   }
 
@@ -206,6 +207,7 @@ function Settings() {
       await settings.config.set('server_url', '');
       await settings.config.set('api_key', '');
       await settings.config.set('user_id', '');
+      await settings.config.set('creds_ts', String(Date.now()));
       setSavedFor('');
       setApiKey('');
       setStatus({ kind: 'info', text: 'signed out — saved credentials cleared.' });
@@ -214,6 +216,16 @@ function Settings() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // Quick Connect needs Jellyfin 10.8+ with the feature enabled. Anything
+  // else answers 404 here — say so plainly instead of "server error 404".
+  function qcError(e: unknown): string {
+    const msg = e instanceof Error ? e.message : 'Quick Connect failed.';
+    if (/\b404\b/.test(msg)) {
+      return 'this server does not support Quick Connect (needs Jellyfin 10.8+ with Quick Connect enabled). Use the API key instead.';
+    }
+    return msg;
   }
 
   return (
