@@ -1,0 +1,99 @@
+main {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #0b0b0e;
+  color: #f4f4f5;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.25rem;
+}
+
+.hint {
+  color: #a1a1aa;
+  margin: 0 0 1.5rem;
+}
+
+section {
+  background: #141417;
+  border: 1px solid #27272a;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+section h2 {
+  font-size: 1.15rem;
+  margin: 0 0 0.75rem;
+}
+
+label {
+  display: block;
+  font-size: 0.9rem;
+  color: #a1a1aa;
+  margin: 0.75rem 0 0.25rem;
+}
+
+input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.7rem 0.9rem;
+  font-size: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #3f3f46;
+  background: #09090b;
+  color: #f4f4f5;
+}
+
+input:focus {
+  outline: none;
+  border-color: #fbbf24;
+}
+
+button.primary {
+  display: block;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.9rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 0.9rem;
+  background: #fbbf24;
+  color: #000;
+}
+
+button.primary:disabled {
+  opacity: 0.5;
+}
+
+.status {
+  margin-top: 0.9rem;
+  padding: 0.8rem 1rem;
+  border-radius: 0.75rem;
+  background: #1c1917;
+  color: #e7e5e4;
+  word-break: break-word;
+}
+
+.status.ok {
+  background: #052e16;
+  color: #bbf7d0;
+}
+
+.status.err {
+  background: #450a0a;
+  color: #fecaca;
+}
+
+.saved {
+  font-size: 0.9rem;
+  color: #a1a1aa;
+  margin-bottom: 1rem;
+  word-break: break-all;
+}

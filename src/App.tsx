@@ -1,0 +1,283 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getClient } from './client';
+import { ArtCtx, Icon, MiniPlayer, useMenu, usePlayer, type ArtResolver, type MenuAction } from './components';
+import { JellyfinClient, type Creds } from './jellyfin';
+import { player } from './player';
+import type { View } from './nav';
+import Detail from './views/Detail';
+import Home from './views/Home';
+import Library from './views/Library';
+import NowPlaying from './views/NowPlaying';
+import Queue from './views/Queue';
+import Search from './views/Search';
+import Setup, { CREDS_KEY, type StoredCreds } from './views/Setup';
+
+const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | 'note'; label: string }[] = [
+  { view: { name: 'home' }, icon: 'home', label: 'Home' },
+  { view: { name: 'library', tab: 'albums' }, icon: 'library', label: 'Library' },
+  { view: { name: 'search' }, icon: 'search', label: 'Search' },
+  { view: { name: 'queue' }, icon: 'queue', label: 'Queue' },
+  { view: { name: 'nowplaying' }, icon: 'note', label: 'Playing' },
+];
+
+async function readCreds(): Promise<Creds | null> {
+  const client = getClient();
+  const get = async (key: string): Promise<string | null> => {
+    try {
+      const r = await client.config.get({ key });
+      return r.ok ? (r.response.value ?? null) : null;
+    } catch {
+      return null;
+    }
+  };
+  const server = await get('server_url');
+  const apiKey = await get('api_key');
+  const userId = await get('user_id');
+  if (server && apiKey && userId) return { server, apiKey, userId };
+  // on-device fallback: the setup view saves here
+  try {
+    const r = await client.store.get({ key: CREDS_KEY });
+    if (r.ok && r.response.value) {
+      const s = JSON.parse(r.response.value) as StoredCreds;
+      if (s.server && s.apiKey && s.userId) return { server: s.server, apiKey: s.apiKey, userId: s.userId };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+export default function App() {
+  const [credsState, setCredsState] = useState<'loading' | 'missing' | 'ready'>('loading');
+  const [jf, setJf] = useState<JellyfinClient | null>(null);
+  const [stack, setStack] = useState<View[]>([{ name: 'home' }]);
+  const [daemonUp, setDaemonUp] = useState(true);
+  const menu = useMenu();
+  usePlayer();
+
+  const view = stack[stack.length - 1];
+  const viewRef = useRef(view);
+  viewRef.current = view;
+
+  const load = useCallback(async () => {
+    setCredsState('loading');
+    const c = await readCreds();
+    if (!c) {
+      setJf(null);
+      player.configure(null);
+      setCredsState('missing');
+      return;
+    }
+    const client = new JellyfinClient(c);
+    player.configure(client);
+    await player.ensureDeviceId();
+    await player.loadPrefs();
+    setJf(client);
+    setCredsState('ready');
+  }, []);
+
+  // daemon link + player/volume subscriptions, once
+  useEffect(() => {
+    const client = getClient();
+    const offLink = client.on(e => setDaemonUp(e.type !== 'close'));
+    const offSnap = client.player.onSnapshot(reply => {
+      const st = reply.state;
+      player.handleSnapshot({
+        context: st.context ? { uri: st.context.uri } : null,
+        playback: { state: st.playback.state, positionMs: st.playback.positionMs },
+      });
+    });
+    const offErrReply = client.player.onErrorReply(reply => player.handlePlayerError(reply.error.type));
+    const offErrEvent = client.player.onErrorEvent(reply => player.handlePlayerError(reply.error.type));
+    const offVol = client.audio.onVolumeChanged(msg => {
+      player.volume = msg.level;
+      player.muted = msg.muted;
+      player.touch();
+    });
+    const offCfg = client.config.onChanged(() => {
+      void load();
+    });
+    // prime from the phone's current state
+    client.player
+      .stateGet()
+      .then(res => {
+        if (res.ok) {
+          const st = res.response.state;
+          player.handleSnapshot({
+            context: st.context ? { uri: st.context.uri } : null,
+            playback: { state: st.playback.state, positionMs: st.playback.positionMs },
+          });
+        }
+      })
+      .catch(() => {});
+    void load();
+    return () => {
+      offLink();
+      offSnap();
+      offErrReply();
+      offErrEvent();
+      offVol();
+      offCfg();
+    };
+  }, [load]);
+
+  const nav = useCallback((v: View) => {
+    // bottom-nav destinations replace the stack; drill-ins push
+    const isRoot = v.name === 'home' || v.name === 'library' || v.name === 'search' || v.name === 'queue' || v.name === 'nowplaying';
+    setStack(prev => (isRoot ? [v] : [...prev, v]));
+  }, []);
+
+  const back = useCallback(() => {
+    setStack(prev => (prev.length > 1 ? prev.slice(0, -1) : prev));
+  }, []);
+
+  const openMenu = useCallback(
+    (title: string, actions: MenuAction[]) => menu.open({ title, actions }),
+    [menu],
+  );
+
+  // knob volume: relative steps only; leading-edge throttle with trailing flush
+  const lastNudge = useRef(0);
+  const pendingDir = useRef<0 | 1 | -1>(0);
+  const nudgeTimer = useRef<number | null>(null);
+  const nudgeVolume = useCallback((dir: 1 | -1) => {
+    const fire = (d: 1 | -1): void => {
+      const c = getClient();
+      if (d > 0) c.audio.volumeUp().catch(() => {});
+      else c.audio.volumeDown().catch(() => {});
+    };
+    const now = Date.now();
+    if (now - lastNudge.current >= 90) {
+      lastNudge.current = now;
+      fire(dir);
+    } else {
+      pendingDir.current = dir;
+      if (nudgeTimer.current === null) {
+        nudgeTimer.current = window.setTimeout(() => {
+          nudgeTimer.current = null;
+          const d = pendingDir.current;
+          pendingDir.current = 0;
+          if (d !== 0) {
+            lastNudge.current = Date.now();
+            fire(d);
+          }
+        }, 90);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const v = viewRef.current;
+      if (e.key === 'Escape') {
+        back();
+        return;
+      }
+      if (e.key === 'm' || e.key === 'M') {
+        if (v.name !== 'setup') void player.toggle();
+        return;
+      }
+      // preset shortcuts, ignored while typing in the on-screen keyboard views
+      if (v.name === 'search' || v.name === 'setup') return;
+      if (e.key === '1') nav({ name: 'home' });
+      else if (e.key === '2') nav({ name: 'library', tab: 'albums' });
+      else if (e.key === '3') nav({ name: 'search' });
+      else if (e.key === '4') nav({ name: 'nowplaying' });
+    };
+    const onWheel = (e: WheelEvent): void => {
+      if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
+      if (e.deltaX === 0) return;
+      e.preventDefault();
+      nudgeVolume(e.deltaX > 0 ? 1 : -1);
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('wheel', onWheel);
+    };
+  }, [back, nav, nudgeVolume]);
+
+  const artResolver: ArtResolver | null = useMemo(
+    () =>
+      jf
+        ? {
+            trackArt: (t, w = 500) => jf.trackImage(t, w),
+            albumArt: (a, w = 500) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
+            artistArt: (a, w = 500) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
+            playlistArt: (p, w = 500) => (p.imageTag ? jf.imageUrl(p.id, w) : null),
+          }
+        : null,
+    [jf],
+  );
+
+  const renderView = (): React.ReactNode => {
+    if (credsState === 'loading') {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/15 border-t-amber-400" />
+        </div>
+      );
+    }
+    if (credsState === 'missing' || !jf) {
+      return <Setup jf={jf as never} nav={nav} back={back} openMenu={openMenu} onSaved={() => void load()} />;
+    }
+    const props = { jf, nav, back, openMenu };
+    switch (view.name) {
+      case 'home':
+        return <Home {...props} />;
+      case 'library':
+        return <Library {...props} initialTab={view.tab} />;
+      case 'detail':
+        return <Detail {...props} params={view} />;
+      case 'search':
+        return <Search {...props} />;
+      case 'queue':
+        return <Queue {...props} />;
+      case 'nowplaying':
+        return <NowPlaying {...props} />;
+      case 'setup':
+        return <Setup {...props} onSaved={() => void load()} />;
+    }
+  };
+
+  const showChrome = credsState === 'ready' && view.name !== 'nowplaying';
+  const current = player.current();
+
+  return (
+    <ArtCtx.Provider value={artResolver}>
+      <div className="flex h-full w-full flex-col bg-zinc-950 text-white">
+        {!daemonUp ? (
+          <div className="flex h-12 shrink-0 items-center justify-center bg-red-900/80 text-lg">
+            Lost connection to the device. Reconnect to continue.
+          </div>
+        ) : null}
+        <div className="relative min-h-0 flex-1">{renderView()}</div>
+        {showChrome && current ? <MiniPlayer onOpen={() => nav({ name: 'nowplaying' })} /> : null}
+        {showChrome ? (
+          <nav className="flex h-20 shrink-0 items-stretch border-t border-white/10 bg-zinc-950">
+            {NAV_ITEMS.map(item => {
+              const active =
+                view.name === item.view.name ||
+                (item.view.name === 'library' && view.name === 'library');
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => nav(item.view)}
+                  className={`flex flex-1 flex-col items-center justify-center gap-1 ${
+                    active ? 'text-amber-300' : 'text-white/55 active:bg-white/10'
+                  }`}
+                >
+                  <Icon name={item.icon} size={30} />
+                  <span className="text-base leading-none">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        ) : null}
+        {menu.sheet}
+      </div>
+    </ArtCtx.Provider>
+  );
+}

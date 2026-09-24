@@ -1,0 +1,415 @@
+// Jellyfin REST client. Every call tunnels through the phone via
+// client.net.fetch, so it works with no CORS and away from home as long as
+// the phone can reach the server. Auth rides in the api_key query param,
+// because the tunnel sends no custom headers for us.
+
+import { getClient } from './client';
+
+export interface Creds {
+  server: string;
+  apiKey: string;
+  userId: string;
+}
+
+export interface Track {
+  id: string;
+  name: string;
+  albumId: string | null;
+  album: string;
+  artist: string;
+  durationMs: number;
+  isFavorite: boolean;
+  playCount: number;
+  imageTag: string | null;
+  albumImageTag: string | null;
+}
+
+export interface Album {
+  id: string;
+  name: string;
+  artist: string;
+  year: number | null;
+  songCount: number;
+  imageTag: string | null;
+  isFavorite: boolean;
+}
+
+export interface Artist {
+  id: string;
+  name: string;
+  imageTag: string | null;
+}
+
+export interface Playlist {
+  id: string;
+  name: string;
+  imageTag: string | null;
+  songCount: number;
+}
+
+export interface Genre {
+  id: string;
+  name: string;
+}
+
+export interface SearchHits {
+  tracks: Track[];
+  albums: Album[];
+  artists: Artist[];
+}
+
+export class JellyfinError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+interface RawItem {
+  Id: string;
+  Name: string;
+  Type?: string;
+  AlbumId?: string;
+  Album?: string;
+  Artists?: string[];
+  AlbumArtist?: string;
+  RunTimeTicks?: number;
+  IndexNumber?: number;
+  ParentIndexNumber?: number;
+  ProductionYear?: number;
+  ChildCount?: number;
+  ImageTags?: Record<string, string>;
+  AlbumPrimaryImageTag?: string;
+  UserData?: { IsFavorite?: boolean; PlayCount?: number; Played?: boolean };
+}
+
+const FETCH_TIMEOUT_MS = 15_000;
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+function cleanServer(s: string): string {
+  return s.trim().replace(/\/+$/, '');
+}
+
+export function normalizeTrack(raw: RawItem): Track {
+  return {
+    id: raw.Id,
+    name: raw.Name,
+    albumId: raw.AlbumId ?? null,
+    album: raw.Album ?? '',
+    artist: raw.Artists?.join(', ') ?? raw.AlbumArtist ?? 'Unknown artist',
+    durationMs: Math.round((raw.RunTimeTicks ?? 0) / 10_000),
+    isFavorite: raw.UserData?.IsFavorite ?? false,
+    playCount: raw.UserData?.PlayCount ?? 0,
+    imageTag: raw.ImageTags?.Primary ?? null,
+    albumImageTag: raw.AlbumPrimaryImageTag ?? null,
+  };
+}
+
+export function normalizeAlbum(raw: RawItem): Album {
+  return {
+    id: raw.Id,
+    name: raw.Name,
+    artist: raw.AlbumArtist ?? raw.Artists?.join(', ') ?? 'Unknown artist',
+    year: raw.ProductionYear ?? null,
+    songCount: raw.ChildCount ?? 0,
+    imageTag: raw.ImageTags?.Primary ?? null,
+    isFavorite: raw.UserData?.IsFavorite ?? false,
+  };
+}
+
+export function normalizeArtist(raw: RawItem): Artist {
+  return { id: raw.Id, name: raw.Name, imageTag: raw.ImageTags?.Primary ?? null };
+}
+
+export function normalizePlaylist(raw: RawItem): Playlist {
+  return {
+    id: raw.Id,
+    name: raw.Name,
+    imageTag: raw.ImageTags?.Primary ?? null,
+    songCount: raw.ChildCount ?? 0,
+  };
+}
+
+export class JellyfinClient {
+  private creds: Creds;
+
+  constructor(creds: Creds) {
+    this.creds = { ...creds, server: cleanServer(creds.server) };
+  }
+
+  get server(): string {
+    return this.creds.server;
+  }
+  get userId(): string {
+    return this.creds.userId;
+  }
+
+  private url(path: string, params: Record<string, string | number | boolean> = {}): string {
+    const q = new URLSearchParams({ api_key: this.creds.apiKey });
+    for (const [k, v] of Object.entries(params)) q.set(k, String(v));
+    return `${this.creds.server}${path}?${q.toString()}`;
+  }
+
+  private async request<T>(
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    params: Record<string, string | number | boolean> = {},
+    body?: unknown,
+  ): Promise<T> {
+    const client = getClient();
+    const res = await client.net.fetch({
+      request: {
+        url: this.url(path, params),
+        method,
+        headers: body ? [{ name: 'Content-Type', value: 'application/json' }] : [],
+        body: body ? enc.encode(JSON.stringify(body)) : null,
+        timeoutMs: FETCH_TIMEOUT_MS,
+        redirect: 'follow',
+      },
+    });
+    if (!res.ok) {
+      const e = res.error;
+      const kind = 'error' in e ? (e.error.type === 'requestFailed' ? e.error.data.reason : e.error.type) : e.type;
+      throw new JellyfinError(0, `network error: ${kind}`);
+    }
+    const r = res.response.response;
+    if (r.status === 401 || r.status === 403) {
+      throw new JellyfinError(r.status, 'unauthorized: check the API key');
+    }
+    if (r.status >= 400) {
+      throw new JellyfinError(r.status, `server error ${r.status}`);
+    }
+    const text = dec.decode(r.body);
+    if (!text) return null as T;
+    return JSON.parse(text) as T;
+  }
+
+  private async items<T>(
+    params: Record<string, string | number | boolean>,
+    map: (r: RawItem) => T,
+  ): Promise<T[]> {
+    const data = await this.request<{ Items?: RawItem[] }>(
+      'GET',
+      `/Users/${this.creds.userId}/Items`,
+      { Recursive: true, ...params },
+    );
+    return (data.Items ?? []).map(map);
+  }
+
+  albums(): Promise<Album[]> {
+    return this.items({ IncludeItemTypes: 'MusicAlbum', SortBy: 'SortName', SortOrder: 'Ascending' }, normalizeAlbum);
+  }
+
+  albumTracks(albumId: string): Promise<Track[]> {
+    return this.items(
+      {
+        ParentId: albumId,
+        IncludeItemTypes: 'Audio',
+        SortBy: 'ParentIndexNumber,IndexNumber,SortName',
+        SortOrder: 'Ascending',
+      },
+      normalizeTrack,
+    );
+  }
+
+  artists(): Promise<Artist[]> {
+    return this.items({ IncludeItemTypes: 'MusicArtist', SortBy: 'SortName', SortOrder: 'Ascending' }, normalizeArtist);
+  }
+
+  artistTracks(artistId: string): Promise<Track[]> {
+    return this.items(
+      { ArtistIds: artistId, IncludeItemTypes: 'Audio', SortBy: 'Album,SortName', SortOrder: 'Ascending' },
+      normalizeTrack,
+    );
+  }
+
+  artistAlbums(artistId: string): Promise<Album[]> {
+    return this.items(
+      { ArtistIds: artistId, IncludeItemTypes: 'MusicAlbum', SortBy: 'ProductionYear,SortName', SortOrder: 'Ascending' },
+      normalizeAlbum,
+    );
+  }
+
+  playlists(): Promise<Playlist[]> {
+    return this.items({ IncludeItemTypes: 'Playlist', SortBy: 'SortName', SortOrder: 'Ascending' }, normalizePlaylist);
+  }
+
+  playlistItems(playlistId: string): Promise<Track[]> {
+    return this.items({ ParentId: playlistId, IncludeItemTypes: 'Audio' }, normalizeTrack);
+  }
+
+  async genres(): Promise<Genre[]> {
+    const data = await this.request<{ Items?: RawItem[] }>('GET', '/MusicGenres', {
+      UserId: this.creds.userId,
+      Recursive: true,
+    });
+    return (data.Items ?? []).map(g => ({ id: g.Id, name: g.Name }));
+  }
+
+  genreTracks(genreId: string): Promise<Track[]> {
+    return this.items({ GenreIds: genreId, IncludeItemTypes: 'Audio', SortBy: 'SortName' }, normalizeTrack);
+  }
+
+  favorites(): Promise<Track[]> {
+    return this.items({ Filters: 'IsFavorite', IncludeItemTypes: 'Audio', SortBy: 'SortName' }, normalizeTrack);
+  }
+
+  async toggleFavorite(itemId: string, favorite: boolean): Promise<void> {
+    const path = `/Users/${this.creds.userId}/FavoriteItems/${itemId}`;
+    await this.request<void>(favorite ? 'POST' : 'DELETE', path);
+  }
+
+  recentlyAddedAlbums(limit = 20): Promise<Album[]> {
+    return this.items(
+      {
+        IncludeItemTypes: 'MusicAlbum',
+        SortBy: 'DateCreated,SortName',
+        SortOrder: 'Descending',
+        Limit: limit,
+      },
+      normalizeAlbum,
+    );
+  }
+
+  recentlyPlayedTracks(limit = 20): Promise<Track[]> {
+    return this.items(
+      {
+        IncludeItemTypes: 'Audio',
+        SortBy: 'DatePlayed,SortName',
+        SortOrder: 'Descending',
+        Limit: limit,
+      },
+      normalizeTrack,
+    );
+  }
+
+  shuffleAll(limit = 200): Promise<Track[]> {
+    return this.items({ IncludeItemTypes: 'Audio', SortBy: 'Random', Limit: limit }, normalizeTrack);
+  }
+
+  async instantMixFor(itemId: string, limit = 50): Promise<Track[]> {
+    const data = await this.request<{ Items?: RawItem[] }>('GET', `/Items/${itemId}/InstantMix`, {
+      UserId: this.creds.userId,
+      IncludeItemTypes: 'Audio',
+      Limit: limit,
+    });
+    return (data.Items ?? []).map(normalizeTrack);
+  }
+
+  async searchHints(term: string): Promise<SearchHits> {
+    const data = await this.request<{ SearchHints?: RawItem[] }>('GET', '/Search/Hints', {
+      SearchTerm: term,
+      MediaTypes: 'Audio,MusicAlbum,MusicArtist',
+      Limit: 25,
+    });
+    const hits: SearchHits = { tracks: [], albums: [], artists: [] };
+    for (const h of data.SearchHints ?? []) {
+      if (h.Type === 'Audio') hits.tracks.push(normalizeTrack(h));
+      else if (h.Type === 'MusicAlbum') hits.albums.push(normalizeAlbum(h));
+      else if (h.Type === 'MusicArtist') hits.artists.push(normalizeArtist(h));
+    }
+    return hits;
+  }
+
+  // Playback stream. Auth must ride in the query string: the phone's stream
+  // provider sends no headers, only Icy-MetaData: 1.
+  streamUrl(trackId: string, deviceId: string): string {
+    return this.url(`/Audio/${trackId}/universal`, {
+      UserId: this.creds.userId,
+      DeviceId: deviceId,
+      AudioCodec: 'mp3,aac,opus,flac',
+      TranscodingContainer: 'mp3',
+      TranscodingProtocol: 'http',
+    });
+  }
+
+  // Plain <img> needs no CORS, so artwork goes straight at the server.
+  imageUrl(itemId: string, width = 500): string {
+    return this.url(`/Items/${itemId}/Images/Primary`, { fillWidth: width, quality: 90 });
+  }
+
+  // Artwork for a track: its own image, else its album's.
+  trackImage(track: Track, width = 500): string | null {
+    if (track.imageTag) return this.imageUrl(track.id, width);
+    if (track.albumId) return this.imageUrl(track.albumId, width);
+    return null;
+  }
+
+  // Scrobbling: Jellyfin session playback reporting.
+  reportPlaying(itemId: string, sessionId: string): Promise<void> {
+    return this.request<void>('POST', '/Sessions/Playing', {}, {
+      ItemId: itemId,
+      PlayMethod: 'Transcode',
+      PlaySessionId: sessionId,
+      CanSeek: true,
+      IsPaused: false,
+    }).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
+  reportProgress(itemId: string, sessionId: string, positionMs: number, paused: boolean): Promise<void> {
+    return this.request<void>('POST', '/Sessions/Playing/Progress', {}, {
+      ItemId: itemId,
+      PositionTicks: Math.round(positionMs * 10_000),
+      IsPaused: paused,
+      PlaySessionId: sessionId,
+      CanSeek: true,
+    }).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
+  reportStopped(itemId: string, sessionId: string, positionMs: number): Promise<void> {
+    return this.request<void>('POST', '/Sessions/Playing/Stopped', {}, {
+      ItemId: itemId,
+      PositionTicks: Math.round(positionMs * 10_000),
+      PlaySessionId: sessionId,
+    }).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+}
+
+// One-off connection test used by the settings page and onboarding.
+export async function testConnection(server: string, apiKey: string): Promise<{ userId: string; userName: string }> {
+  const clean = cleanServer(server);
+  const client = getClient();
+  const res = await client.net.fetch({
+    request: {
+      url: `${clean}/System/Info?api_key=${encodeURIComponent(apiKey.trim())}`,
+      method: 'GET',
+      headers: [],
+      body: null,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      redirect: 'follow',
+    },
+  });
+  if (!res.ok) throw new JellyfinError(0, 'could not reach the server; check the URL and that the phone has network');
+  if (res.response.response.status === 401 || res.response.response.status === 403) {
+    throw new JellyfinError(401, 'the API key was rejected');
+  }
+  if (res.response.response.status >= 400) {
+    throw new JellyfinError(res.response.response.status, `server error ${res.response.response.status}`);
+  }
+  // System/Info needs no user; now find the user id for library calls.
+  const usersRes = await client.net.fetch({
+    request: {
+      url: `${clean}/Users?api_key=${encodeURIComponent(apiKey.trim())}`,
+      method: 'GET',
+      headers: [],
+      body: null,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      redirect: 'follow',
+    },
+  });
+  if (!usersRes.ok) throw new JellyfinError(0, 'connected, but could not list users');
+  const users = JSON.parse(dec.decode(usersRes.response.response.body)) as { Id: string; Name: string }[];
+  if (!users.length) throw new JellyfinError(0, 'connected, but the server returned no users');
+  return { userId: users[0].Id, userName: users[0].Name };
+}
