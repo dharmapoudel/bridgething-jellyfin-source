@@ -8,7 +8,7 @@
 
 import { getClient } from './client';
 
-export const FINCH_VERSION = '0.1.8';
+export const FINCH_VERSION = '0.1.9';
 
 // Trailing slashes turn every path into a double-slash (//Users/...) which
 // some servers and reverse proxies reject — strip them once, up front.
@@ -610,16 +610,22 @@ export interface QuickConnectSession {
 async function qcFetch<T>(server: string, path: string, opts?: { body?: unknown; post?: boolean }): Promise<T> {
   const clean = cleanServer(server);
   const client = getClient();
-  // No token exists yet at this point, but Jellyfin still parses the
-  // X-Emby-Authorization client header on these endpoints — without it the
-  // server throws (ArgumentNullException) and answers 400 "Error processing
-  // request.", which is exactly what a headerless Initiate gets.
+  // No token exists yet at this point, but Jellyfin still needs the client
+  // identification header on these endpoints: TryConnect throws
+  // ArgumentException (=> 400 "Error processing request.") when DeviceId,
+  // Device, Client or Version are missing. The MODERN `Authorization` header
+  // is required here, not just `X-Emby-Authorization` — recent Jellyfin runs
+  // a migration that disables legacy authorization, and with it off the
+  // server silently ignores every X-Emby-* header, so the client info never
+  // reaches the parser. (This is also why Finamp works: it sends the
+  // `Authorization` header.) We send both with identical values; the server
+  // prefers `Authorization` when both are present.
   const deviceId = await finchDeviceId();
+  const authValue =
+    `MediaBrowser Client="Finch", Device="Car Thing", DeviceId="${deviceId}", Version="${FINCH_VERSION}"`;
   const headers: { name: string; value: string }[] = [
-    {
-      name: 'X-Emby-Authorization',
-      value: `MediaBrowser Client="Finch", Device="Car Thing", DeviceId="${deviceId}", Version="${FINCH_VERSION}"`,
-    },
+    { name: 'Authorization', value: authValue },
+    { name: 'X-Emby-Authorization', value: authValue },
   ];
   const hasBody = opts?.body !== undefined;
   const method = hasBody || opts?.post ? 'POST' : 'GET';
@@ -641,7 +647,7 @@ async function qcFetch<T>(server: string, path: string, opts?: { body?: unknown;
 }
 
 // Step 1: get a secret + the 6-digit code to show the user. No token needed,
-// but the X-Emby-Authorization client header (sent by qcFetch) is required.
+// but the client identification header (sent by qcFetch) is required.
 // Initiate is POST-only on Jellyfin; the POST carries no body.
 export function quickConnectInitiate(server: string): Promise<QuickConnectSession> {
   return qcFetch<QuickConnectSession>(server, '/QuickConnect/Initiate', { post: true });
