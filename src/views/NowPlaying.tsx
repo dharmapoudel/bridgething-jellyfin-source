@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getClient } from '../client';
 import { Icon, IconBtn, ProgressBar, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
 import type { JellyfinClient, LyricLineVM } from '../jellyfin';
 import { player } from '../player';
@@ -141,7 +142,87 @@ function LyricsPanel({
   return <SyncedLyrics lines={lyrics.lines} />;
 }
 
-function TransportButtons({
+function fmtClock(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// Device clock for the top of the info panel, like the reference.
+function Clock() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => force(n => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const s = new Date().toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  return <div className="text-lg text-white/60">{s}</div>;
+}
+
+// Volume slider. The daemon only takes absolute levels via setVolume;
+// drags are throttled so a long swipe doesn't flood the phone link.
+function VolumeSlider() {
+  usePlayer();
+  const trackRef = useRef<HTMLDivElement>(null);
+  const lastSent = useRef(0);
+  const level = player.volume ?? 0;
+
+  const send = (clientX: number, force: boolean): void => {
+    const el = trackRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const p = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    const now = Date.now();
+    if (!force && now - lastSent.current < 120) return;
+    lastSent.current = now;
+    player.volume = p; // optimistic; the daemon's VolumeChanged confirms
+    player.touch();
+    getClient()
+      .audio.setVolume({ level: p })
+      .catch(() => {});
+  };
+
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <Icon name="volDown" size={28} className="shrink-0 text-white/50" />
+      <div
+        ref={trackRef}
+        role="slider"
+        aria-label="Volume"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(level * 100)}
+        className="relative h-10 min-w-0 flex-1 cursor-pointer touch-none"
+        onPointerDown={e => {
+          (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+          send(e.clientX, true);
+        }}
+        onPointerMove={e => {
+          if (e.buttons > 0) send(e.clientX, false);
+        }}
+        onPointerUp={e => send(e.clientX, true)}
+      >
+        <div className="absolute top-1/2 right-0 left-0 h-1.5 -translate-y-1/2 rounded-full bg-white/20" />
+        <div
+          className="absolute top-1/2 left-0 h-1.5 -translate-y-1/2 rounded-full bg-amber-400"
+          style={{ width: `${level * 100}%` }}
+        />
+        <div
+          className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow"
+          style={{ left: `${level * 100}%` }}
+        />
+      </div>
+      <Icon name="volUp" size={28} className="shrink-0 text-white/50" />
+    </div>
+  );
+}
+
+// Right-hand info column: clock, title/artist, progress with times,
+// transport, volume — the Spotify Car Thing arrangement from the mock.
+function InfoPanel({
   isFavorite,
   onToggleFav,
   lyricsTab,
@@ -156,44 +237,87 @@ function TransportButtons({
 }) {
   usePlayer();
   const t = player.current();
+
+  // Tick the time labels while playing; the bar itself animates on rAF.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!player.intentPlaying) return;
+    const id = window.setInterval(() => tick(n => n + 1), 500);
+    return () => window.clearInterval(id);
+  }, [player.intentPlaying]);
+
+  if (!t) return null;
+  const dur = player.trackDurationMs;
+  const pos = player.positionNow();
+
   return (
-    <div className="flex items-center gap-4">
-      <IconBtn size={72} label="Previous" onClick={() => void player.prev()} disabled={!t}>
-        <Icon name="prev" size={40} />
-      </IconBtn>
-      <IconBtn
-        size={96}
-        label={player.intentPlaying ? 'Pause' : 'Play'}
-        active
-        onClick={() => void player.toggle()}
-        disabled={!t}
-      >
-        {player.loading ? (
-          <span className="h-10 w-10 animate-spin rounded-full border-4 border-black/20 border-t-black" />
-        ) : (
-          <Icon name={player.intentPlaying ? 'pause' : 'play'} size={52} />
-        )}
-      </IconBtn>
-      <IconBtn size={72} label="Next" onClick={() => void player.next()} disabled={!t}>
-        <Icon name="next" size={40} />
-      </IconBtn>
-      <IconBtn
-        size={64}
-        label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-        active={isFavorite}
-        onClick={onToggleFav}
-      >
-        <Icon name={isFavorite ? 'heartFill' : 'heart'} size={28} />
-      </IconBtn>
-      {lyricsSupported !== false ? (
-        <IconBtn
-          size={64}
-          label={lyricsTab ? 'Hide lyrics' : 'Show lyrics'}
-          active={lyricsTab}
-          onClick={onToggleLyrics}
-        >
-          <Icon name="mix" size={28} />
+    <div className="flex h-full min-h-0 flex-col bg-[#14161c] px-6 py-4">
+      <div className="flex shrink-0 items-center justify-between">
+        <Clock />
+        <div className="flex items-center">
+          <IconBtn
+            size={52}
+            label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            active={isFavorite}
+            onClick={onToggleFav}
+          >
+            <Icon name={isFavorite ? 'heartFill' : 'heart'} size={24} />
+          </IconBtn>
+          {lyricsSupported !== false ? (
+            <IconBtn
+              size={52}
+              label={lyricsTab ? 'Hide lyrics' : 'Show lyrics'}
+              active={lyricsTab}
+              onClick={onToggleLyrics}
+            >
+              <Icon name="mix" size={24} />
+            </IconBtn>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-1 min-w-0 shrink-0">
+        <div className="truncate text-3xl font-bold text-white">{t.name}</div>
+        <div className="mt-0.5 truncate text-2xl text-white/60">{t.artist}</div>
+      </div>
+
+      <div className="mt-3 shrink-0">
+        <ProgressBar onSeek={ms => void player.seekTo(ms)} />
+        <div className="-mt-1 flex items-center justify-between text-lg text-white/50">
+          <span>{fmtClock(pos)}</span>
+          <span>-{fmtClock(Math.max(0, dur - pos))}</span>
+        </div>
+      </div>
+
+      <div className="mt-1 flex shrink-0 items-center justify-center gap-6">
+        <IconBtn size={64} label="Previous" onClick={() => void player.prev()}>
+          <Icon name="prev" size={36} />
         </IconBtn>
+        <IconBtn
+          size={88}
+          label={player.intentPlaying ? 'Pause' : 'Play'}
+          active
+          onClick={() => void player.toggle()}
+        >
+          {player.loading ? (
+            <span className="h-9 w-9 animate-spin rounded-full border-4 border-black/20 border-t-black" />
+          ) : (
+            <Icon name={player.intentPlaying ? 'pause' : 'play'} size={44} />
+          )}
+        </IconBtn>
+        <IconBtn size={64} label="Next" onClick={() => void player.next()}>
+          <Icon name="next" size={36} />
+        </IconBtn>
+      </div>
+
+      <div className="mt-auto flex shrink-0 items-center pt-2">
+        <VolumeSlider />
+      </div>
+
+      {player.error ? (
+        <div className="shrink-0 pt-1 text-xl text-red-300">{player.error}</div>
+      ) : player.external ? (
+        <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
       ) : null}
     </div>
   );
@@ -269,38 +393,20 @@ export default function NowPlaying({ jf, nav }: ViewProps) {
     </div>
   );
 
-  const statusLine =
-    player.error ? (
-      <div className="text-xl text-red-300">{player.error}</div>
-    ) : player.external ? (
-      <div className="text-xl text-white/50">Another app is playing on the phone.</div>
-    ) : null;
-
-  // Info panel: artist, title, album, progress, a few buttons — the split
-  // design from the mock, on a deep maroon like its dark variant.
   const infoPanel = (
-    <div className="flex min-h-0 flex-col justify-center gap-4 overflow-hidden bg-[#2b1114] px-8">
-      <div className="min-w-0">
-        <div className="truncate text-xl font-semibold tracking-wide text-white/70">{t.artist}</div>
-        <div className="mt-1 line-clamp-4 text-4xl leading-tight font-bold text-white">{t.name}</div>
-        {t.album ? <div className="mt-1 truncate text-2xl text-white/50">{t.album}</div> : null}
-      </div>
-      <ProgressBar onSeek={ms => void player.seekTo(ms)} />
-      <TransportButtons
-        isFavorite={t.isFavorite}
-        onToggleFav={toggleFav}
-        lyricsTab={lyricsTab}
-        onToggleLyrics={() => setLyricsTab(v => !v)}
-        lyricsSupported={lyricsSupported}
-      />
-      {statusLine}
-    </div>
+    <InfoPanel
+      isFavorite={t.isFavorite}
+      onToggleFav={toggleFav}
+      lyricsTab={lyricsTab}
+      onToggleLyrics={() => setLyricsTab(v => !v)}
+      lyricsSupported={lyricsSupported}
+    />
   );
 
   if (portrait) {
     return (
       <div className="flex h-full flex-col">
-        <div className="w-full shrink-0 overflow-hidden" style={{ height: '52%' }}>
+        <div className="w-full shrink-0 overflow-hidden" style={{ height: '48%' }}>
           {artPanel}
         </div>
         <div className="min-h-0 flex-1">{infoPanel}</div>
@@ -310,8 +416,8 @@ export default function NowPlaying({ jf, nav }: ViewProps) {
 
   return (
     <div className="flex h-full">
-      <div className="h-full w-[42%] shrink-0">{infoPanel}</div>
-      <div className="h-full min-w-0 flex-1 overflow-hidden">{artPanel}</div>
+      <div className="h-full w-[55%] shrink-0 overflow-hidden">{artPanel}</div>
+      <div className="h-full min-w-0 flex-1">{infoPanel}</div>
     </div>
   );
 }
