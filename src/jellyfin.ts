@@ -215,11 +215,17 @@ export class JellyfinClient {
     body?: unknown,
   ): Promise<T> {
     const client = getClient();
+    // Auth rides two ways: the api_key query param (required for stream and
+    // image URLs, where no headers can be sent) AND the X-Emby-Token header
+    // (Jellyfin's canonical header auth — survives any proxy or HTTP stack
+    // that mangles query strings).
+    const headers = [{ name: 'X-Emby-Token', value: this.creds.apiKey }];
+    if (body) headers.push({ name: 'Content-Type', value: 'application/json' });
     const res = await client.net.fetch({
       request: {
         url: this.url(path, params),
         method,
-        headers: body ? [{ name: 'Content-Type', value: 'application/json' }] : [],
+        headers,
         body: body ? enc.encode(JSON.stringify(body)) : null,
         timeoutMs: FETCH_TIMEOUT_MS,
         redirect: 'follow',
@@ -232,7 +238,11 @@ export class JellyfinClient {
     }
     const r = res.response.response;
     if (r.status === 401 || r.status === 403) {
-      throw new JellyfinError(r.status, 'unauthorized: check the API key');
+      const keyHint = this.creds.apiKey ? `${this.creds.apiKey.slice(0, 4)}…` : '(empty)';
+      throw new JellyfinError(
+        r.status,
+        `unauthorized (${r.status}): the server rejected the credentials Finch is using — ${this.creds.server} with key ${keyHint}. Re-check them in the Finch settings on your phone.`,
+      );
     }
     if (r.status >= 400) {
       throw new JellyfinError(r.status, `server error ${r.status}`);
@@ -476,12 +486,14 @@ export class JellyfinClient {
 // One-off connection test used by the settings page and onboarding.
 export async function testConnection(server: string, apiKey: string): Promise<{ userId: string; userName: string }> {
   const clean = cleanServer(server);
+  const key = apiKey.trim();
   const client = getClient();
+  const headers = [{ name: 'X-Emby-Token', value: key }];
   const res = await client.net.fetch({
     request: {
-      url: `${clean}/System/Info?api_key=${encodeURIComponent(apiKey.trim())}`,
+      url: `${clean}/System/Info?api_key=${encodeURIComponent(key)}`,
       method: 'GET',
-      headers: [],
+      headers,
       body: null,
       timeoutMs: FETCH_TIMEOUT_MS,
       redirect: 'follow',
@@ -489,7 +501,7 @@ export async function testConnection(server: string, apiKey: string): Promise<{ 
   });
   if (!res.ok) throw new JellyfinError(0, 'could not reach the server; check the URL and that the phone has network');
   if (res.response.response.status === 401 || res.response.response.status === 403) {
-    throw new JellyfinError(401, 'the API key was rejected');
+    throw new JellyfinError(401, `the server rejected that API key (${res.response.response.status})`);
   }
   if (res.response.response.status >= 400) {
     throw new JellyfinError(res.response.response.status, `server error ${res.response.response.status}`);
@@ -497,9 +509,9 @@ export async function testConnection(server: string, apiKey: string): Promise<{ 
   // System/Info needs no user; now find the user id for library calls.
   const usersRes = await client.net.fetch({
     request: {
-      url: `${clean}/Users?api_key=${encodeURIComponent(apiKey.trim())}`,
+      url: `${clean}/Users?api_key=${encodeURIComponent(key)}`,
       method: 'GET',
-      headers: [],
+      headers,
       body: null,
       timeoutMs: FETCH_TIMEOUT_MS,
       redirect: 'follow',
