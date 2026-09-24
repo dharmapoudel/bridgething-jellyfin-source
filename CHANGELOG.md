@@ -1,3 +1,7 @@
+## 0.1.22
+
+- New app icon: the approved singing-finch head — short upward finch beak, bold swept-back crest, music note — in gold line-art on the dark navy background, full-bleed square, 256-color PNG at 17.8KB (well under the daemon 64KB cap).
+
 ## 0.1.21
 
 - Buttons are now green instead of gold: play/pause, the active library pill, all CTA buttons and the connect button use the green accent (pressed state darkens). The progress bar and knob stay gold so the theme keeps both colors.
