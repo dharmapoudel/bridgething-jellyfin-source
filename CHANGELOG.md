@@ -1,3 +1,12 @@
+## 0.1.17
+
+- The seekbar now matches the reference: slimmer track and knob, elapsed on the left and remaining (-m:ss) on the right.
+- The lyrics button is a simple notes icon; it dims and disables when the current track has no lyrics (lyrics are fetched when the track changes, cached per track).
+- Removed the duplicate time labels under the seekbar (the progress bar's own row was doubled by the info panel's).
+- Lyrics scrolling is now smooth instead of jumping line to line, so the highlight feels in sync with the audio.
+- The lyrics view now shows the album art blurred and darkened behind the lyrics.
+- The mini player shows a circular progress ring around the play/pause icon.
+
 ## 0.1.16
 
 - Removed the volume slider from the Now Playing screen (the knob handles volume).

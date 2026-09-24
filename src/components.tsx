@@ -420,8 +420,20 @@ export function TrackRow({
 export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
   usePlayer();
   const art = useArt();
+  const [, force] = useState(0);
   const t = player.current();
+  const dur = player.trackDurationMs;
+
+  // Tick the progress ring while playing; snapshots alone are too sparse.
+  useEffect(() => {
+    if (!player.intentPlaying) return;
+    const id = window.setInterval(() => force(n => n + 1), 500);
+    return () => window.clearInterval(id);
+  }, [player.intentPlaying]);
+
   if (!t) return null;
+  const ratio = dur > 0 ? Math.min(1, Math.max(0, player.positionNow() / dur)) : 0;
+  const ringLen = 2 * Math.PI * 28;
   return (
     <button
       type="button"
@@ -436,8 +448,22 @@ export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
       {player.loading ? (
         <span className="h-8 w-8 animate-spin rounded-full border-3 border-white/15 border-t-amber-400" />
       ) : (
-        <span className="flex h-16 w-16 items-center justify-center rounded-full text-white/90">
-          <Icon name={player.intentPlaying ? 'pause' : 'play'} size={34} />
+        <span className="relative flex h-16 w-16 shrink-0 items-center justify-center text-white/90">
+          <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
+            <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="5" />
+            <circle
+              cx="32"
+              cy="32"
+              r="28"
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeDasharray={ringLen}
+              strokeDashoffset={ringLen * (1 - ratio)}
+            />
+          </svg>
+          <Icon name={player.intentPlaying ? 'pause' : 'play'} size={30} />
         </span>
       )}
     </button>
@@ -491,17 +517,17 @@ export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
           if (e.buttons) seekFromEvent(e.clientX);
         }}
       >
-        <div className="absolute top-1/2 h-2.5 w-full -translate-y-1/2 rounded-full bg-white/15">
+        <div className="absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-white/15">
           <div className="h-full rounded-full bg-amber-400" style={{ width: `${ratio * 100}%` }} />
         </div>
         <div
-          className="absolute top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-300 shadow"
+          className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-300 shadow"
           style={{ left: `${ratio * 100}%` }}
         />
       </div>
       <div className="flex justify-between text-lg text-white/55">
         <span>{fmtTime(player.positionNow())}</span>
-        <span>{fmtTime(dur)}</span>
+        <span>-{fmtTime(Math.max(0, dur - player.positionNow()))}</span>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type TouchEvent as RTouchEvent } from 'react';
 import { Icon, IconBtn, ProgressBar, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
-import type { JellyfinClient, LyricLineVM } from '../jellyfin';
+import type { LyricLineVM } from '../jellyfin';
 import { player } from '../player';
 import type { ViewProps } from '../nav';
 
@@ -50,7 +50,9 @@ function SyncedLyrics({ lines }: { lines: LyricLineVM[] }) {
   useEffect(() => {
     if (active !== lastActive.current && active >= 0) {
       lastActive.current = active;
-      lineRefs.current.get(active)?.scrollIntoView({ block: 'center' });
+      // Smooth-glide to the new line; the old instant jump is what made
+      // the lyrics feel out of sync with the audio.
+      lineRefs.current.get(active)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
   });
 
@@ -79,38 +81,10 @@ function SyncedLyrics({ lines }: { lines: LyricLineVM[] }) {
   );
 }
 
-function LyricsPanel({
-  jf,
-  trackId,
-  durationMs,
-}: {
-  jf: JellyfinClient;
-  trackId: string;
-  durationMs: number;
-}) {
-  const [lyrics, setLyrics] = useState<LyricsState>({ state: 'loading' });
-
-  // Lazily fetched when the tab is first opened, never for the whole queue
-  // up front. The stale guard handles the track changing mid-fetch.
-  useEffect(() => {
-    let stale = false;
-    setLyrics({ state: 'loading' });
-    jf.getLyrics(trackId, durationMs).then(
-      p => {
-        if (stale) return;
-        if (!p || !p.lines.length) setLyrics({ state: 'none' });
-        else if (p.isSynced) setLyrics({ state: 'synced', lines: p.lines });
-        else setLyrics({ state: 'plain', lines: p.lines });
-      },
-      () => {
-        if (!stale) setLyrics({ state: 'none' });
-      },
-    );
-    return () => {
-      stale = true;
-    };
-  }, [jf, trackId, durationMs]);
-
+// Pure renderer — the lyrics for the current track are fetched once in
+// NowPlaying (per-track cached in the client), so the toggle can dim when
+// the track has none and the tab opens instantly.
+function LyricsPanel({ lyrics }: { lyrics: LyricsState }) {
   if (lyrics.state === 'loading') {
     return (
       <div className="flex h-full w-full items-center justify-center text-2xl text-white/50">
@@ -121,7 +95,7 @@ function LyricsPanel({
   if (lyrics.state === 'none') {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-8 text-center">
-        <Icon name="mic" size={64} className="text-white/20" />
+        <Icon name="note" size={64} className="text-white/20" />
         <div className="text-2xl font-semibold text-white/70">No lyrics for this track</div>
         <div className="text-lg leading-snug text-white/40">
           Jellyfin shows lyrics embedded in the file's tags — rescan the library after tagging.
@@ -139,11 +113,6 @@ function LyricsPanel({
     );
   }
   return <SyncedLyrics lines={lyrics.lines} />;
-}
-
-function fmtClock(ms: number): string {
-  const s = Math.max(0, Math.round(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 // Device clock for the top of the info panel, like the reference.
@@ -169,27 +138,19 @@ function InfoPanel({
   lyricsTab,
   onToggleLyrics,
   lyricsSupported,
+  hasLyrics,
 }: {
   isFavorite: boolean;
   onToggleFav: () => void;
   lyricsTab: boolean;
   onToggleLyrics: () => void;
   lyricsSupported: boolean | null;
+  hasLyrics: boolean;
 }) {
   usePlayer();
   const t = player.current();
 
-  // Tick the time labels while playing; the bar itself animates on rAF.
-  const [, tick] = useState(0);
-  useEffect(() => {
-    if (!player.intentPlaying) return;
-    const id = window.setInterval(() => tick(n => n + 1), 500);
-    return () => window.clearInterval(id);
-  }, [player.intentPlaying]);
-
   if (!t) return null;
-  const dur = player.trackDurationMs;
-  const pos = player.positionNow();
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#14161c] px-6 py-4">
@@ -204,10 +165,6 @@ function InfoPanel({
 
       <div className="mt-3 shrink-0">
         <ProgressBar onSeek={ms => void player.seekTo(ms)} />
-        <div className="-mt-1 flex items-center justify-between text-lg text-white/50">
-          <span>{fmtClock(pos)}</span>
-          <span>-{fmtClock(Math.max(0, dur - pos))}</span>
-        </div>
       </div>
 
       <div className="mt-1 flex shrink-0 items-center justify-center gap-6">
@@ -243,11 +200,12 @@ function InfoPanel({
         {lyricsSupported !== false ? (
           <IconBtn
             size={56}
-            label={lyricsTab ? 'Hide lyrics' : 'Show lyrics'}
+            label={hasLyrics ? (lyricsTab ? 'Hide lyrics' : 'Show lyrics') : 'No lyrics for this track'}
             active={lyricsTab}
+            disabled={!hasLyrics}
             onClick={onToggleLyrics}
           >
-            <Icon name="mic" size={26} />
+            <Icon name="note" size={26} />
           </IconBtn>
         ) : null}
       </div>
@@ -267,6 +225,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   const portrait = usePortrait();
   const [lyricsTab, setLyricsTab] = useState(false);
   const [lyricsSupported, setLyricsSupported] = useState<boolean | null>(null);
+  const [lyrics, setLyrics] = useState<LyricsState>({ state: 'loading' });
   const t = player.current();
   const trackId = t?.id;
   const artPanelRef = useRef<HTMLDivElement>(null);
@@ -306,7 +265,9 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   };
 
   // Full-bleed artwork for the hero panel, served from the shared blob cache.
+  // A small copy doubles as the blurred lyrics backdrop (cheap to blur).
   const { url: heroArt } = useCachedArt(t ? (art?.trackArt(t, 800) ?? null) : null);
+  const { url: bgArt } = useCachedArt(t ? (art?.trackArt(t, 200) ?? null) : null);
 
   // Lyrics need server >= 10.9; hide the toggle entirely on older servers.
   useEffect(() => {
@@ -318,6 +279,32 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
       stale = true;
     };
   }, [jf]);
+
+  // Fetch the current track's lyrics as soon as the track changes (one
+  // request per track, cached in the client) so the toggle can dim when
+  // the track has none and the lyrics tab opens instantly.
+  useEffect(() => {
+    if (!trackId || lyricsSupported === false) {
+      setLyrics({ state: 'none' });
+      return;
+    }
+    let stale = false;
+    setLyrics({ state: 'loading' });
+    jf.getLyrics(trackId, t?.durationMs ?? 0).then(
+      p => {
+        if (stale) return;
+        if (!p || !p.lines.length) setLyrics({ state: 'none' });
+        else if (p.isSynced) setLyrics({ state: 'synced', lines: p.lines });
+        else setLyrics({ state: 'plain', lines: p.lines });
+      },
+      () => {
+        if (!stale) setLyrics({ state: 'none' });
+      },
+    );
+    return () => {
+      stale = true;
+    };
+  }, [jf, trackId, lyricsSupported]);
 
   // A new track gets a fresh lyrics tab; the panel fetches lazily on open.
   useEffect(() => {
@@ -352,7 +339,20 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   }
 
   const artPanel = lyricsTab ? (
-    <LyricsPanel jf={jf} trackId={t.id} durationMs={t.durationMs} />
+    <div className="relative h-full w-full overflow-hidden bg-[#14161c]">
+      {bgArt ? (
+        <img
+          src={bgArt}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="absolute inset-0 h-full w-full scale-125 object-cover blur-2xl brightness-[0.4]"
+        />
+      ) : null}
+      <div className="relative h-full w-full">
+        <LyricsPanel lyrics={lyrics} />
+      </div>
+    </div>
   ) : heroArt ? (
     <img
       src={heroArt}
@@ -373,6 +373,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
       lyricsTab={lyricsTab}
       onToggleLyrics={() => setLyricsTab(v => !v)}
       lyricsSupported={lyricsSupported}
+      hasLyrics={lyrics.state === 'synced' || lyrics.state === 'plain'}
     />
   );
 
