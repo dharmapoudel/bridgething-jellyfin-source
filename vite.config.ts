@@ -7,7 +7,7 @@ export default defineConfig(async () => ({
   plugins: [react(), tailwindcss(), bridgething()],
   build: {
     target: 'es2022',
-    sourcemap: true,
+    sourcemap: false, // 0.1.0 shipped a 1.47MB .js.map in the sideload zip; keep bundles lean
   },
   server: {
     host: true,

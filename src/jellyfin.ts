@@ -58,6 +58,62 @@ export interface SearchHits {
   artists: Artist[];
 }
 
+// Lyrics. Jellyfin 10.9+ extracts embedded lyrics (ID3 USLT, Vorbis LYRICS,
+// …) during scans and serves them at GET /Audio/{itemId}/Lyrics as a
+// LyricDto: { Metadata: { IsSynced, Offset, … }, Lyrics: [{ Text, Start }] }.
+// Times are 100ns ticks (ms = ticks / 10_000). LyricLine has NO End field —
+// a line runs until the next line starts. 404 = no lyrics for the track.
+export interface LyricLineVM {
+  startMs: number; // -1 when the line carries no timestamp (unsynced)
+  endMs: number; // derived from the next line's start; -1 when unsynced
+  text: string;
+}
+
+export interface ParsedLyrics {
+  lines: LyricLineVM[];
+  isSynced: boolean;
+}
+
+interface RawLyricLine {
+  Text?: string;
+  Start?: number | null;
+  Cues?: unknown;
+}
+
+interface RawLyricDto {
+  Metadata?: {
+    IsSynced?: boolean | null;
+    Offset?: number | null; // lyric offset vs audio, in ticks
+  };
+  Lyrics?: RawLyricLine[];
+}
+
+const TICKS_PER_MS = 10_000;
+
+function parseLyricDto(dto: RawLyricDto, durationMs: number): ParsedLyrics | null {
+  const raw = (dto.Lyrics ?? []).filter(l => (l.Text ?? '').trim().length > 0);
+  if (!raw.length) return null;
+  // Offset shifts every line relative to the audio; Jellyfin reports it in ticks.
+  const offsetMs = Math.round((dto.Metadata?.Offset ?? 0) / TICKS_PER_MS);
+  const lines: LyricLineVM[] = raw.map(l => ({
+    startMs: l.Start != null ? Math.max(0, Math.round(l.Start / TICKS_PER_MS) + offsetMs) : -1,
+    endMs: -1,
+    text: (l.Text ?? '').trim(),
+  }));
+  const synced = lines.some(l => l.startMs >= 0);
+  if (synced) {
+    for (let i = 0; i < lines.length; i++) {
+      lines[i].endMs =
+        i + 1 < lines.length
+          ? lines[i + 1].startMs
+          : durationMs > 0
+            ? durationMs
+            : lines[i].startMs + 60_000;
+    }
+  }
+  return { lines, isSynced: synced && dto.Metadata?.IsSynced !== false };
+}
+
 export class JellyfinError extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
@@ -373,6 +429,47 @@ export class JellyfinClient {
       () => undefined,
       () => undefined,
     );
+  }
+
+  // Lyrics need server ≥ 10.9 (the Lyrics API debuted there). Cache the
+  // version so Now Playing doesn't refetch it per track.
+  private versionCache: { major: number; minor: number } | null | undefined;
+
+  async serverVersion(): Promise<{ major: number; minor: number }> {
+    if (this.versionCache === undefined) {
+      try {
+        const info = await this.request<{ Version?: string }>('GET', '/System/Info');
+        const m = /^(\d+)\.(\d+)/.exec(info.Version ?? '');
+        this.versionCache = m ? { major: Number(m[1]), minor: Number(m[2]) } : null;
+      } catch {
+        this.versionCache = null;
+      }
+    }
+    return this.versionCache ?? { major: 0, minor: 0 };
+  }
+
+  async lyricsSupported(): Promise<boolean> {
+    const v = await this.serverVersion();
+    return v.major > 10 || (v.major === 10 && v.minor >= 9);
+  }
+
+  // Embedded lyrics for one track. 404 (no lyrics) and any other failure
+  // both resolve to null — missing lyrics must never break Now Playing.
+  // Results are cached per track id so re-opening Now Playing is free.
+  private lyricsCache = new Map<string, ParsedLyrics | null>();
+
+  async getLyrics(itemId: string, durationMs = 0): Promise<ParsedLyrics | null> {
+    const hit = this.lyricsCache.get(itemId);
+    if (hit !== undefined) return hit;
+    let parsed: ParsedLyrics | null = null;
+    try {
+      const dto = await this.request<RawLyricDto>('GET', `/Audio/${itemId}/Lyrics`);
+      parsed = dto ? parseLyricDto(dto, durationMs) : null;
+    } catch {
+      parsed = null;
+    }
+    this.lyricsCache.set(itemId, parsed);
+    return parsed;
   }
 }
 
