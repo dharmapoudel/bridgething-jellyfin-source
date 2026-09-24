@@ -1,3 +1,7 @@
+## 0.1.18
+
+- App icon is now a close-up of the singing finch's head — the full-body bird was too small to read at tile size. (Re-encoded under the daemon's 64KB icon cap.)
+
 ## 0.1.17
 
 - The seekbar now matches the reference: slimmer track and knob, elapsed on the left and remaining (-m:ss) on the right.
