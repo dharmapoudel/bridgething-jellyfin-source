@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getClient } from '../client';
-import { Artwork, Icon, IconBtn, ProgressBar, useArt, usePlayer, usePortrait } from '../components';
+import { Icon, IconBtn, ProgressBar, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
 import type { JellyfinClient, LyricLineVM } from '../jellyfin';
 import { player } from '../player';
 import type { ViewProps } from '../nav';
@@ -142,25 +141,28 @@ function LyricsPanel({
   return <SyncedLyrics lines={lyrics.lines} />;
 }
 
-function Controls({ big = false }: { big?: boolean }) {
+function TransportButtons({
+  isFavorite,
+  onToggleFav,
+  lyricsTab,
+  onToggleLyrics,
+  lyricsSupported,
+}: {
+  isFavorite: boolean;
+  onToggleFav: () => void;
+  lyricsTab: boolean;
+  onToggleLyrics: () => void;
+  lyricsSupported: boolean | null;
+}) {
   usePlayer();
   const t = player.current();
-  const main = big ? 96 : 80;
   return (
-    <div className="flex items-center justify-center gap-3">
-      <IconBtn
-        size={big ? 72 : 64}
-        label={player.shuffle ? 'Shuffle on' : 'Shuffle off'}
-        active={player.shuffle}
-        onClick={() => player.setShuffle(!player.shuffle)}
-      >
-        <Icon name="shuffle" size={30} />
-      </IconBtn>
-      <IconBtn size={big ? 80 : 72} label="Previous" onClick={() => void player.prev()} disabled={!t}>
-        <Icon name="prev" size={big ? 44 : 38} />
+    <div className="flex items-center gap-4">
+      <IconBtn size={72} label="Previous" onClick={() => void player.prev()} disabled={!t}>
+        <Icon name="prev" size={40} />
       </IconBtn>
       <IconBtn
-        size={main}
+        size={96}
         label={player.intentPlaying ? 'Pause' : 'Play'}
         active
         onClick={() => void player.toggle()}
@@ -169,20 +171,30 @@ function Controls({ big = false }: { big?: boolean }) {
         {player.loading ? (
           <span className="h-10 w-10 animate-spin rounded-full border-4 border-black/20 border-t-black" />
         ) : (
-          <Icon name={player.intentPlaying ? 'pause' : 'play'} size={big ? 52 : 44} />
+          <Icon name={player.intentPlaying ? 'pause' : 'play'} size={52} />
         )}
       </IconBtn>
-      <IconBtn size={big ? 80 : 72} label="Next" onClick={() => void player.next()} disabled={!t}>
-        <Icon name="next" size={big ? 44 : 38} />
+      <IconBtn size={72} label="Next" onClick={() => void player.next()} disabled={!t}>
+        <Icon name="next" size={40} />
       </IconBtn>
       <IconBtn
-        size={big ? 72 : 64}
-        label={`Repeat ${player.repeat}`}
-        active={player.repeat !== 'off'}
-        onClick={() => player.cycleRepeat()}
+        size={64}
+        label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        active={isFavorite}
+        onClick={onToggleFav}
       >
-        <Icon name={player.repeat === 'one' ? 'repeatOne' : 'repeat'} size={30} />
+        <Icon name={isFavorite ? 'heartFill' : 'heart'} size={28} />
       </IconBtn>
+      {lyricsSupported !== false ? (
+        <IconBtn
+          size={64}
+          label={lyricsTab ? 'Hide lyrics' : 'Show lyrics'}
+          active={lyricsTab}
+          onClick={onToggleLyrics}
+        >
+          <Icon name="mix" size={28} />
+        </IconBtn>
+      ) : null}
     </div>
   );
 }
@@ -196,7 +208,10 @@ export default function NowPlaying({ jf, nav }: ViewProps) {
   const t = player.current();
   const trackId = t?.id;
 
-  // Lyrics need server >= 10.9; hide the tab entirely on older servers.
+  // Full-bleed artwork for the hero panel, served from the shared blob cache.
+  const { url: heroArt } = useCachedArt(t ? (art?.trackArt(t, 800) ?? null) : null);
+
+  // Lyrics need server >= 10.9; hide the toggle entirely on older servers.
   useEffect(() => {
     let stale = false;
     jf.lyricsSupported().then(ok => {
@@ -223,12 +238,6 @@ export default function NowPlaying({ jf, nav }: ViewProps) {
     });
   };
 
-  const nudge = (dir: 1 | -1): void => {
-    const c = getClient();
-    if (dir > 0) c.audio.volumeUp().catch(() => {});
-    else c.audio.volumeDown().catch(() => {});
-  };
-
   if (!t) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-6 px-8 text-center">
@@ -245,100 +254,64 @@ export default function NowPlaying({ jf, nav }: ViewProps) {
     );
   }
 
-  const upcoming = player.queue.length - player.index - 1;
-
-  const artBlock = (
-    <div className="flex items-center justify-center">
-      <Artwork
-        src={art?.trackArt(t, 800) ?? null}
-        size={portrait ? 380 : 400}
-        rounded="rounded-2xl"
-        label={t.album}
-      />
-    </div>
-  );
-
-  // The lyrics tab takes over the artwork's footprint (top panel in
-  // portrait, left panel in landscape).
-  const heroBlock = lyricsTab ? (
+  const artPanel = lyricsTab ? (
     <LyricsPanel jf={jf} trackId={t.id} durationMs={t.durationMs} />
+  ) : heroArt ? (
+    <img
+      src={heroArt}
+      alt={t.album || t.name}
+      draggable={false}
+      className="h-full w-full object-cover"
+    />
   ) : (
-    artBlock
-  );
-
-  const infoBlock = (
-    <div className="flex min-h-0 w-full flex-col justify-center gap-3 px-6">
-      <div className="min-w-0 text-center">
-        <div className="truncate text-4xl font-bold">{t.name}</div>
-        <div className="truncate text-2xl text-white/60">{t.artist}</div>
-        {t.album ? <div className="truncate text-xl text-white/40">{t.album}</div> : null}
-      </div>
-      {player.error ? (
-        <div className="rounded-2xl bg-red-500/15 px-4 py-3 text-center text-xl text-red-300">{player.error}</div>
-      ) : player.external ? (
-        <div className="rounded-2xl bg-white/8 px-4 py-3 text-center text-xl text-white/60">
-          Another app is playing on the phone.
-        </div>
-      ) : null}
-      <ProgressBar onSeek={ms => void player.seekTo(ms)} />
-      <Controls big={!portrait} />
-      <div className="flex items-center justify-center gap-3">
-        <IconBtn size={64} label={t.isFavorite ? 'Remove from favorites' : 'Add to favorites'} active={t.isFavorite} onClick={toggleFav}>
-          <Icon name={t.isFavorite ? 'heartFill' : 'heart'} size={30} />
-        </IconBtn>
-        <IconBtn size={64} label="Volume down" onClick={() => nudge(-1)}>
-          <Icon name="volDown" size={30} />
-        </IconBtn>
-        <IconBtn
-          size={64}
-          label={player.muted ? 'Unmute' : 'Mute'}
-          active={player.muted}
-          onClick={() => getClient().audio.muteToggle().catch(() => {})}
-        >
-          <Icon name={player.muted ? 'mute' : 'volUp'} size={30} />
-        </IconBtn>
-        <IconBtn size={64} label="Volume up" onClick={() => nudge(1)}>
-          <Icon name="volUp" size={30} />
-        </IconBtn>
-        {lyricsSupported !== false ? (
-          <IconBtn
-            size={64}
-            label={lyricsTab ? 'Hide lyrics' : 'Show lyrics'}
-            active={lyricsTab}
-            onClick={() => setLyricsTab(v => !v)}
-          >
-            <Icon name="mix" size={30} />
-          </IconBtn>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => nav({ name: 'queue' })}
-          className="flex h-16 items-center gap-2 rounded-full bg-white/10 px-5 text-xl active:bg-white/20"
-        >
-          <Icon name="queue" size={28} />
-          {upcoming > 0 ? `${upcoming} up next` : 'Queue'}
-        </button>
-      </div>
+    <div className="flex h-full w-full items-center justify-center bg-zinc-900">
+      <Icon name="note" size={96} className="text-white/15" />
     </div>
   );
+
+  const statusLine =
+    player.error ? (
+      <div className="text-xl text-red-300">{player.error}</div>
+    ) : player.external ? (
+      <div className="text-xl text-white/50">Another app is playing on the phone.</div>
+    ) : null;
+
+  // Info panel: artist, title, album, progress, a few buttons — the split
+  // design from the mock, on a deep maroon like its dark variant.
+  const infoPanel = (
+    <div className="flex min-h-0 flex-col justify-center gap-4 overflow-hidden bg-[#2b1114] px-8">
+      <div className="min-w-0">
+        <div className="truncate text-xl font-semibold tracking-wide text-white/70">{t.artist}</div>
+        <div className="mt-1 line-clamp-4 text-4xl leading-tight font-bold text-white">{t.name}</div>
+        {t.album ? <div className="mt-1 truncate text-2xl text-white/50">{t.album}</div> : null}
+      </div>
+      <ProgressBar onSeek={ms => void player.seekTo(ms)} />
+      <TransportButtons
+        isFavorite={t.isFavorite}
+        onToggleFav={toggleFav}
+        lyricsTab={lyricsTab}
+        onToggleLyrics={() => setLyricsTab(v => !v)}
+        lyricsSupported={lyricsSupported}
+      />
+      {statusLine}
+    </div>
+  );
+
+  if (portrait) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="w-full shrink-0 overflow-hidden" style={{ height: '52%' }}>
+          {artPanel}
+        </div>
+        <div className="min-h-0 flex-1">{infoPanel}</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="relative flex h-full flex-col">
-      {portrait ? (
-        <>
-          <div className="flex min-h-0 items-center justify-center pt-4" style={{ flex: '62 0 0%' }}>
-            {heroBlock}
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto" style={{ flex: '38 0 0%' }}>
-            {infoBlock}
-          </div>
-        </>
-      ) : (
-        <div className="flex min-h-0 flex-1 items-center">
-          <div className="flex h-full w-[46%] items-center justify-center">{heroBlock}</div>
-          <div className="flex h-full w-[54%] items-center">{infoBlock}</div>
-        </div>
-      )}
+    <div className="flex h-full">
+      <div className="h-full w-[42%] shrink-0">{infoPanel}</div>
+      <div className="h-full min-w-0 flex-1 overflow-hidden">{artPanel}</div>
     </div>
   );
 }
