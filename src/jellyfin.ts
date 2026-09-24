@@ -662,14 +662,16 @@ export async function quickConnectPoll(server: string, secret: string): Promise<
   return data.Authenticated === true;
 }
 
-// Step 3: trade the approved secret for an access token + user.
+// Step 3: trade the approved secret for an access token + user. The token
+// endpoint lives on the Users controller, not the QuickConnect controller:
+// POST /Users/AuthenticateWithQuickConnect with { Secret }.
 export async function quickConnectAuthenticate(
   server: string,
   secret: string,
 ): Promise<{ apiKey: string; userId: string; userName: string }> {
   const data = await qcFetch<{ AccessToken?: string; User?: { Id?: string; Name?: string } }>(
     server,
-    '/QuickConnect/Authenticate',
+    '/Users/AuthenticateWithQuickConnect',
     { body: { Secret: secret } },
   );
   if (!data.AccessToken || !data.User?.Id) {

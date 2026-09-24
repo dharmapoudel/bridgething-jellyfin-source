@@ -180,7 +180,7 @@ function Settings() {
               stopQcPoll();
               setStatus({ kind: 'info', text: 'code approved — finishing sign-in…' });
               const auth = (await postJson(
-                `${srv}/QuickConnect/Authenticate`,
+                `${srv}/Users/AuthenticateWithQuickConnect`,
                 { Secret: init.Secret },
                 qcHeaders(),
               )) as {
