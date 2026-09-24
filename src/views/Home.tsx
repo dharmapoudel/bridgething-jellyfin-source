@@ -80,19 +80,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar
-        title="Finch"
-        right={
-          <button
-            type="button"
-            aria-label="Search"
-            onClick={() => nav({ name: 'search' })}
-            className="flex h-14 w-14 items-center justify-center rounded-full text-white/80 active:bg-white/15"
-          >
-            <Icon name="search" size={30} />
-          </button>
-        }
-      />
+      <TopBar title="Finch" />
       <div className="min-h-0 flex-1 overflow-y-auto py-4">
         {resume && player.current() === null ? (
           <section className="mb-6 px-4">

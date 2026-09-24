@@ -5,7 +5,6 @@ export type View =
   | { name: 'home' }
   | { name: 'library'; tab: LibTab }
   | { name: 'detail'; kind: 'album' | 'artist' | 'playlist' | 'genre'; id: string; title: string }
-  | { name: 'search' }
   | { name: 'nowplaying' }
   | { name: 'queue' }
   | { name: 'setup' };

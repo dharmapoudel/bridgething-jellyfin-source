@@ -9,13 +9,11 @@ import Home from './views/Home';
 import Library from './views/Library';
 import NowPlaying from './views/NowPlaying';
 import Queue from './views/Queue';
-import Search from './views/Search';
 import Setup, { CREDS_KEY, type StoredCreds } from './views/Setup';
 
 const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | 'note'; label: string }[] = [
   { view: { name: 'home' }, icon: 'home', label: 'Home' },
   { view: { name: 'library', tab: 'albums' }, icon: 'library', label: 'Library' },
-  { view: { name: 'search' }, icon: 'search', label: 'Search' },
   { view: { name: 'queue' }, icon: 'queue', label: 'Queue' },
   { view: { name: 'nowplaying' }, icon: 'note', label: 'Playing' },
 ];
@@ -135,7 +133,7 @@ export default function App() {
 
   const nav = useCallback((v: View) => {
     // bottom-nav destinations replace the stack; drill-ins push
-    const isRoot = v.name === 'home' || v.name === 'library' || v.name === 'search' || v.name === 'queue' || v.name === 'nowplaying';
+    const isRoot = v.name === 'home' || v.name === 'library' || v.name === 'queue' || v.name === 'nowplaying';
     setStack(prev => (isRoot ? [v] : [...prev, v]));
   }, []);
 
@@ -190,10 +188,9 @@ export default function App() {
         return;
       }
       // preset shortcuts, ignored while typing in the on-screen keyboard views
-      if (v.name === 'search' || v.name === 'setup') return;
+      if (v.name === 'setup') return;
       if (e.key === '1') nav({ name: 'home' });
       else if (e.key === '2') nav({ name: 'library', tab: 'albums' });
-      else if (e.key === '3') nav({ name: 'search' });
       else if (e.key === '4') nav({ name: 'nowplaying' });
     };
     const onWheel = (e: WheelEvent): void => {
@@ -242,8 +239,6 @@ export default function App() {
         return <Library {...props} initialTab={view.tab} />;
       case 'detail':
         return <Detail {...props} params={view} />;
-      case 'search':
-        return <Search {...props} />;
       case 'queue':
         return <Queue {...props} />;
       case 'nowplaying':

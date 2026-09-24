@@ -8,7 +8,7 @@
 
 import { getClient } from './client';
 
-export const FINCH_VERSION = '0.1.4';
+export const FINCH_VERSION = '0.1.5';
 
 export interface Creds {
   server: string;
