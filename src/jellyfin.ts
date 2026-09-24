@@ -8,7 +8,7 @@
 
 import { getClient } from './client';
 
-export const FINCH_VERSION = '0.1.9';
+export const FINCH_VERSION = '0.1.10';
 
 // Trailing slashes turn every path into a double-slash (//Users/...) which
 // some servers and reverse proxies reject — strip them once, up front.
@@ -649,8 +649,14 @@ async function qcFetch<T>(server: string, path: string, opts?: { body?: unknown;
 // Step 1: get a secret + the 6-digit code to show the user. No token needed,
 // but the client identification header (sent by qcFetch) is required.
 // Initiate is POST-only on Jellyfin; the POST carries no body.
-export function quickConnectInitiate(server: string): Promise<QuickConnectSession> {
-  return qcFetch<QuickConnectSession>(server, '/QuickConnect/Initiate', { post: true });
+// Note: Jellyfin returns PascalCase keys (Secret, Code) — map them to our
+// camelCase session, otherwise the secret is undefined and the poll 404s.
+export async function quickConnectInitiate(server: string): Promise<QuickConnectSession> {
+  const data = await qcFetch<{ Secret?: string; Code?: string }>(server, '/QuickConnect/Initiate', { post: true });
+  if (!data.Secret || !data.Code) {
+    throw new JellyfinError(0, 'the server did not return a Quick Connect code.');
+  }
+  return { secret: data.Secret, code: data.Code };
 }
 
 // Step 2: poll until the user approves the code in Jellyfin.

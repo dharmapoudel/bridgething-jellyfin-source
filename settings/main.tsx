@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const APP_VERSION = '0.1.9';
+const APP_VERSION = '0.1.10';
 
 type Status = { kind: 'ok' | 'err' | 'info'; text: string } | null;
 

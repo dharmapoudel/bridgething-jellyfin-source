@@ -24,6 +24,13 @@
         "label": "Jellyfin user id (filled in automatically by the settings page sign-in)"
       },
       "type": "string"
+    },
+    {
+      "data": {
+        "key": "creds_ts",
+        "label": "Internal: credentials timestamp, written by sign-in (do not edit)"
+      },
+      "type": "string"
     }
   ],
   "description": "Your Jellyfin music library on the Car Thing: browse albums, artists and playlists, and play them through your phone.",
@@ -34,5 +41,5 @@
     "net.fetch"
   ],
   "settings": "settings.html",
-  "version": "0.1.9"
+  "version": "0.1.10"
 }
