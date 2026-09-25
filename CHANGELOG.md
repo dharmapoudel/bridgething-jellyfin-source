@@ -1,3 +1,6 @@
+## 0.1.37
+- Now Playing action row: lyrics and heart swapped positions (lyrics left, heart right), and both icons are now translucent when inactive — the active state stays a solid green icon.
+
 ## 0.1.36
 - Outfit is now the default font across the entire app (it was only the Now Playing title/artist before). The Now Playing clock and seek times stay monospace, per the o-music reference — mono digits do not jitter as the time changes.
 

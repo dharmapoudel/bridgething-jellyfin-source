@@ -272,16 +272,10 @@ function InfoPanel({
             </Ghost>
           </div>
 
-          {/* heart + lyrics take the row o-music gives to its volume bar.
-              No circle backgrounds: the active state is a green icon. */}
+          {/* lyrics + heart take the row o-music gives to its volume bar.
+              Inactive icons are translucent; the active state is a solid
+              green icon. */}
           <div className="flex shrink-0 items-center justify-between">
-            <Ghost
-              label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              onClick={onToggleFav}
-              tint={isFavorite ? '#34d399' : undefined}
-            >
-              <Icon name={isFavorite ? 'heartFill' : 'heart'} size={24} />
-            </Ghost>
             {lyricsSupported !== false ? (
               <Ghost
                 label={
@@ -294,10 +288,19 @@ function InfoPanel({
                 disabled={!hasLyrics}
                 onClick={onToggleLyrics}
                 tint={lyricsTab ? '#34d399' : undefined}
+                className={lyricsTab ? '' : 'opacity-40'}
               >
                 <Icon name="note" size={24} />
               </Ghost>
             ) : null}
+            <Ghost
+              label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              onClick={onToggleFav}
+              tint={isFavorite ? '#34d399' : undefined}
+              className={isFavorite ? '' : 'opacity-40'}
+            >
+              <Icon name={isFavorite ? 'heartFill' : 'heart'} size={24} />
+            </Ghost>
           </div>
 
           {player.error ? (
