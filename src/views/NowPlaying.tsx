@@ -304,7 +304,12 @@ function InfoPanel({
           </div>
 
           {player.error ? (
-            <div className="shrink-0 pt-1 text-xl text-red-300">{player.error}</div>
+            <div className="shrink-0 px-1 pt-1 text-center">
+              <div className="text-xl text-red-300">{player.error}</div>
+              {player.errorDetail ? (
+                <div className="mt-1 text-sm leading-snug text-white/35">{player.errorDetail}</div>
+              ) : null}
+            </div>
           ) : player.external ? (
             <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
           ) : null}

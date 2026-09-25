@@ -106,8 +106,17 @@ export default function App() {
         playback: { state: st.playback.state, positionMs: st.playback.positionMs },
       });
     });
-    const offErrReply = client.player.onErrorReply(reply => player.handlePlayerError(reply.error.type));
-    const offErrEvent = client.player.onErrorEvent(reply => player.handlePlayerError(reply.error.type));
+    const offErrReply = client.player.onErrorReply(reply => {
+      // playFailed carries the phone's own reason (seek rejected, stream
+      // died, gateway hiccup...). Surface it under the friendly message:
+      // it is the only diagnostic for phone-side failures.
+      const e = reply.error;
+      player.handlePlayerError(e.type, e.type === 'playFailed' ? e.data.reason : undefined);
+    });
+    const offErrEvent = client.player.onErrorEvent(reply => {
+      const e = reply.error;
+      player.handlePlayerError(e.type, e.type === 'playFailed' ? e.data.reason : undefined);
+    });
     // Phone Bluetooth link state: on a drop->reconnect the phone often
     // restarts the track from the beginning, so the player heals the
     // position when the link comes back.

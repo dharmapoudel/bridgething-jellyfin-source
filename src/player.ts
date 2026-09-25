@@ -59,6 +59,9 @@ export class PlaybackEngine {
   intentPlaying = false;
   loading = false;
   error: string | null = null;
+  // the phone's own words for the failure (playFailed reason), shown small
+  // under the friendly message. Cleared wherever error is cleared.
+  errorDetail: string | null = null;
   external = false;
   shuffle = false;
   repeat: RepeatMode = 'off';
@@ -216,6 +219,7 @@ export class PlaybackEngine {
     this.positionAt = Date.now();
     this.loading = true;
     this.error = null;
+    this.errorDetail = null;
     this.external = false;
     this.awaitingStart = true;
     this.lastPlayAt = Date.now();
@@ -234,6 +238,7 @@ export class PlaybackEngine {
       this.loading = false;
       this.awaitingStart = false;
       this.error = err instanceof Error ? err.message : 'could not start playback';
+      this.errorDetail = null;
       this.emit();
     }
   }
@@ -489,6 +494,7 @@ export class PlaybackEngine {
       this.loading = false;
       this.awaitingStart = false;
       this.error = null;
+      this.errorDetail = null;
       // A paced seek may not have reached the phone yet (up to 800ms):
       // this snapshot's pre-seek position must not snap our clock back
       // and make the seek look like it didn't take.
@@ -579,6 +585,7 @@ export class PlaybackEngine {
       this.awaitingStart = false;
       this.external = false;
       this.error = null;
+      this.errorDetail = null;
       this.emit();
       void this.persist();
     } catch {
@@ -613,6 +620,7 @@ export class PlaybackEngine {
         this.loading = false;
         this.external = false;
         this.error = null;
+        this.errorDetail = null;
         this.emit();
         void this.persist();
       }
@@ -621,11 +629,12 @@ export class PlaybackEngine {
     }
   }
 
-  handlePlayerError(type: string): void {
+  handlePlayerError(type: string, reason?: string): void {
     this.loading = false;
     this.awaitingStart = false;
     this.intentPlaying = false;
     this.clearProgressTimer();
+    this.errorDetail = reason && reason.trim() ? reason.trim() : null;
     if (type === 'noGateway') this.error = 'Connect your phone to hear audio.';
     else if (type === 'schemeUnclaimed') this.error = 'Update the companion app to play audio.';
     else if (type === 'playFailed') this.error = 'Playback failed. Try another track.';
