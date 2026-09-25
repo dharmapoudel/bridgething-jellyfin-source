@@ -1,3 +1,6 @@
+## 0.1.36
+- Outfit is now the default font across the entire app (it was only the Now Playing title/artist before). The Now Playing clock and seek times stay monospace, per the o-music reference — mono digits do not jitter as the time changes.
+
 ## 0.1.35
 
 - Bluetooth drop recovery: when the phone's link drops and reconnects, the
