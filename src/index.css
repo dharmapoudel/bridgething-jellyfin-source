@@ -10,6 +10,75 @@
   --color-gold: #d2a02e;
   --color-goldlight: #f0cd6e;
   --color-leaf: #34d399;
+
+  /* o-music player type + motion, ported for the Now Playing panel */
+  --font-display: "Outfit", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans Devanagari", sans-serif;
+  --tracking-display: -0.02em;
+
+  /* overshoot on release is what makes a press feel physical rather than dimmed */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-pop: pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-tap: tap 300ms cubic-bezier(0.34, 1.5, 0.64, 1);
+  --animate-sheen: sheen 2.4s ease-in-out infinite;
+  --animate-halo: halo 2.4s ease-out infinite;
+
+  @keyframes pop {
+    from {
+      transform: scale(0.72);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  /* scale rather than shift: anything lateral reads as the glyph being off centre, not as a press */
+  @keyframes tap {
+    0% {
+      transform: scale(1);
+    }
+    35% {
+      transform: scale(0.78);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  /* a strip travelling the filled length, so the rail reads as running rather than parked */
+  @keyframes sheen {
+    from {
+      transform: translateX(-160%);
+    }
+    to {
+      transform: translateX(420%);
+    }
+  }
+
+  @keyframes halo {
+    0% {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 0.5;
+    }
+    70% {
+      opacity: 0;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(2.6);
+      opacity: 0;
+    }
+  }
+}
+
+@font-face {
+  font-family: "Outfit";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url("/fonts/Outfit-Variable.ttf") format("truetype-variations");
 }
 
 @font-face {

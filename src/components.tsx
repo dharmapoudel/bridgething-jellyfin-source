@@ -531,6 +531,42 @@ export function TrackRow({
 
 // ---- progress bar with tap/drag seek ----
 
+// o-music's bare-glyph button: the padding is the only hit area a bare
+// glyph has, and the negative margin keeps it off the layout. Remounting on
+// the tap counter replays the tap keyframes on every press.
+export function Ghost({
+  label,
+  tint,
+  onClick,
+  disabled,
+  className = '',
+  children,
+}: {
+  label: string;
+  tint?: string;
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  const [tap, bump] = useState(0);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onPointerDown={() => bump(n => n + 1)}
+      onClick={onClick}
+      style={tint ? { color: tint } : undefined}
+      className={`-m-3 shrink-0 p-3 text-[#efefef] transition-[transform,color] duration-300 ease-spring active:scale-90 disabled:opacity-30 ${className}`}
+    >
+      <span key={tap} className="grid animate-tap place-items-center">
+        {children}
+      </span>
+    </button>
+  );
+}
+
 export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
   usePlayer();
   const barRef = useRef<HTMLDivElement>(null);
@@ -578,15 +614,28 @@ export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
           if (e.buttons) seekFromEvent(e.clientX);
         }}
       >
-        <div className="absolute top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full bg-white/15">
-          <div className="h-full rounded-full bg-gold" style={{ width: `${ratio * 100}%` }} />
+        <div className="absolute top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full bg-white/18">
+          <div
+            className="relative h-full overflow-hidden rounded-full bg-gold"
+            style={{ width: `${ratio * 100}%` }}
+          >
+            {player.intentPlaying && (
+              <div className="absolute inset-y-0 w-1/3 animate-sheen bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+            )}
+          </div>
         </div>
+        {player.intentPlaying && (
+          <div
+            className="pointer-events-none absolute top-1/2 h-3 w-3 animate-halo rounded-full bg-goldlight"
+            style={{ left: `${ratio * 100}%` }}
+          />
+        )}
         <div
           className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-goldlight shadow"
           style={{ left: `${ratio * 100}%` }}
         />
       </div>
-      <div className="flex justify-between text-sm text-white/55">
+      <div className="mt-2 flex justify-between font-mono text-[0.75rem] tabular-nums text-white/35">
         <span>{fmtTime(player.positionNow())}</span>
         <span>-{fmtTime(Math.max(0, dur - player.positionNow()))}</span>
       </div>

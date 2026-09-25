@@ -1,3 +1,19 @@
+## 0.1.33
+
+- Now Playing info panel rebuilt to match the o-music player exactly
+  (left artwork section untouched): 15px mono clock with blinking colon
+  top-left, Outfit 28px semibold title (30px in portrait) wrapping up to
+  3 lines, 20px soft artist, seek bar + 12px mono times below it, Ghost
+  transport buttons (gap-12, h-9 skips, h-10 play/pause with pop/tap
+  press physics) with the play/pause glyph tinted by the cover's accent
+  color, and heart + lyrics icons in the row o-music gives to its volume
+  bar (green when active, no circles).
+- Info panel background is now the blurred album art washed with a color
+  extracted from the cover (o-music's hue-bucket accent algorithm, run
+  locally on the cached art) instead of the flat dark fill.
+- Seek rail picks up o-music's details: sheen strip travelling the fill
+  while playing, halo pulse on the dot, white/18 track.
+
 ## 0.1.32
 
 - Now Playing transport uses the o-music player's control buttons

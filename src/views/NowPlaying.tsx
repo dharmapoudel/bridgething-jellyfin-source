@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type TouchEvent as RTouchEvent } from 'react';
-import { Icon, ProgressBar, TransportGlyph, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
+import { Ghost, Icon, ProgressBar, TransportGlyph, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
+import { useAccent, type Accent } from '../accent';
 import type { LyricLineVM } from '../jellyfin';
 import { player } from '../player';
 import type { ViewProps } from '../nav';
@@ -133,25 +134,40 @@ function LyricsPanel({ lyrics }: { lyrics: LyricsState }) {
   return <SyncedLyrics lines={lyrics.lines} />;
 }
 
-// Device clock for the top of the info panel, like the reference.
+// Device clock for the top of the info panel, o-music style: 15px mono with
+// a blinking colon, left-aligned like the reference arrangement.
 function Clock() {
-  const [, force] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = window.setInterval(() => force(n => n + 1), 1000);
+    const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
   }, []);
-  const s = new Date().toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-  return <div className="text-lg text-white/60">{s}</div>;
+  const parts = new Date(now)
+    .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+    .split(':');
+  const colon = (
+    <span
+      className="transition-opacity duration-150"
+      style={{ opacity: Math.floor(now / 500) % 2 === 0 ? 1 : 0.2 }}
+    >
+      :
+    </span>
+  );
+  return (
+    <span className="shrink-0 font-mono tabular-nums text-white/35" style={{ fontSize: 15 }}>
+      {parts[0]}
+      {colon}
+      {parts[1]}
+      {colon}
+      {parts[2]}
+    </span>
+  );
 }
 
-// Right-hand info column in the Spotify Car Thing arrangement: clock
-// top-left flush with the content column, title/artist, then the seek bar +
-// transport parked in the lower half, and the heart + lyrics row pinned near
-// the bottom where the reference puts its volume bar (no volume slider).
+// Right-hand info column, ported from o-music's Widget landscape layout:
+// clock top-left, titles, seek bar + times, transport, and heart + lyrics
+// icons where o-music puts its volume bar. The background is the blurred
+// album art washed with a color pulled off the cover.
 function InfoPanel({
   isFavorite,
   onToggleFav,
@@ -159,6 +175,8 @@ function InfoPanel({
   onToggleLyrics,
   lyricsSupported,
   hasLyrics,
+  accent,
+  bgArtUrl,
 }: {
   isFavorite: boolean;
   onToggleFav: () => void;
@@ -166,102 +184,129 @@ function InfoPanel({
   onToggleLyrics: () => void;
   lyricsSupported: boolean | null;
   hasLyrics: boolean;
+  accent: Accent | null;
+  bgArtUrl: string | null;
 }) {
   usePlayer();
+  const portrait = usePortrait();
+  // o-music's landscape card is 280px wide against a 480px tall screen, so
+  // every row it holds comes down a size; portrait keeps the larger metrics.
+  const small = !portrait;
   const t = player.current();
 
   if (!t) return null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#14161c] px-6 py-4">
-      {/* clock sits top-left, flush with the content column like the reference */}
-      <div className="shrink-0">
-        <Clock />
-      </div>
-
-      <div className="mt-2 min-w-0 shrink-0">
-        <div className="truncate text-3xl font-bold text-white">{t.name}</div>
-        <div className="mt-0.5 truncate text-2xl text-white/60">{t.artist}</div>
-      </div>
-
-      {/* the reference parks the seek bar + transport in the lower half of
-          the panel, with the action row pinned near the bottom. The fixed
-          spacer drops the slim seek bar to where the top of the old green
-          play circle sat before the circle was removed. */}
-      <div className="min-h-2 flex-[3]" />
-      <div className="h-[76px] shrink-0" />
-
-      <div className="shrink-0">
-        <ProgressBar onSeek={ms => void player.seekTo(ms)} />
-      </div>
-
-      {/* o-music-style transport: plain icon buttons, no circles; the row
-          sits a circle-radius below where it was with the green circle */}
-      <div className="mt-3 flex shrink-0 items-center justify-center gap-8">
-        <button
-          type="button"
-          aria-label="Previous"
-          onClick={() => void player.prev()}
-          className="p-4 text-white/85 transition-transform duration-150 active:scale-90"
-        >
-          <TransportGlyph name="skip" className="h-9 w-9 -scale-x-100" />
-        </button>
-        <button
-          type="button"
-          aria-label={player.intentPlaying ? 'Pause' : 'Play'}
-          onClick={() => void player.toggle()}
-          className="p-4 text-white/85 transition-transform duration-150 active:scale-90"
-        >
-          {player.loading ? (
-            <span className="block h-9 w-9 animate-spin rounded-full border-4 border-white/15 border-t-white/85" />
-          ) : (
-            <TransportGlyph name={player.intentPlaying ? 'pause' : 'play'} className="h-9 w-9" />
-          )}
-        </button>
-        <button
-          type="button"
-          aria-label="Next"
-          onClick={() => void player.next()}
-          className="p-4 text-white/85 transition-transform duration-150 active:scale-90"
-        >
-          <TransportGlyph name="skip" className="h-9 w-9" />
-        </button>
-      </div>
-
-      <div className="min-h-2 flex-[1]" />
-
-      {/* no circle backgrounds here either: the active state is a green icon */}
-      <div className="flex shrink-0 items-center justify-center gap-8">
-        <button
-          type="button"
-          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          onClick={onToggleFav}
-          className={`p-4 transition-all duration-150 active:scale-90 ${
-            isFavorite ? 'text-leaf' : 'text-white/85'
-          }`}
-        >
-          <Icon name={isFavorite ? 'heartFill' : 'heart'} size={28} />
-        </button>
-        {lyricsSupported !== false ? (
-          <button
-            type="button"
-            aria-label={hasLyrics ? (lyricsTab ? 'Hide lyrics' : 'Show lyrics') : 'No lyrics for this track'}
-            disabled={!hasLyrics}
-            onClick={onToggleLyrics}
-            className={`p-4 transition-all duration-150 active:scale-90 disabled:opacity-30 ${
-              lyricsTab ? 'text-leaf' : 'text-white/85'
-            }`}
-          >
-            <Icon name="note" size={28} />
-          </button>
-        ) : null}
-      </div>
-
-      {player.error ? (
-        <div className="shrink-0 pt-1 text-xl text-red-300">{player.error}</div>
-      ) : player.external ? (
-        <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+      {bgArtUrl ? (
+        <img
+          src={bgArtUrl}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="absolute inset-0 h-full w-full scale-125 object-cover blur-2xl brightness-[0.4]"
+        />
       ) : null}
+      <div
+        className="absolute inset-0 backdrop-blur-md"
+        style={{
+          background: accent
+            ? `linear-gradient(155deg, color-mix(in oklab, ${accent.fill} 18%, rgba(10,12,14,0.72)), rgba(10,12,14,0.72) 78%)`
+            : 'rgba(10,12,14,0.72)',
+        }}
+      />
+      <div className="relative flex min-h-0 flex-1 flex-col px-5 py-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-5">
+          {/* the track takes the space above; the controls hold the bottom edge whatever is left */}
+          <div className="flex min-h-0 flex-1 flex-col justify-between gap-4 py-1">
+            <div className="flex shrink-0 justify-start">
+              <Clock />
+            </div>
+
+            <div className="min-w-0 shrink-0">
+              <div
+                className={`line-clamp-3 font-display font-semibold leading-[1.2] tracking-display text-[#efefef] ${
+                  small ? 'text-[1.75rem]' : 'text-[1.875rem]'
+                }`}
+              >
+                {t.name}
+              </div>
+              <div className="mt-1.5 line-clamp-2 text-[1.25rem] text-white/55">{t.artist}</div>
+            </div>
+
+            <div className="shrink-0">
+              <ProgressBar onSeek={ms => void player.seekTo(ms)} />
+            </div>
+          </div>
+
+          {/* o-music transport: bare glyphs, no circles; play/pause takes the
+              cover's accent color, skips stay off-white */}
+          <div className={`flex shrink-0 items-center justify-center ${small ? 'gap-12' : 'gap-10'}`}>
+            <Ghost label="Previous" onClick={() => void player.prev()}>
+              <TransportGlyph
+                name="skip"
+                className={small ? 'h-9 w-9 -scale-x-100' : 'h-8 w-8 -scale-x-100'}
+              />
+            </Ghost>
+            <Ghost
+              label={player.intentPlaying ? 'Pause' : 'Play'}
+              onClick={() => void player.toggle()}
+              tint={accent?.fill}
+            >
+              {player.loading ? (
+                <span className="block h-10 w-10 animate-spin rounded-full border-4 border-white/15 border-t-white/85" />
+              ) : (
+                <span
+                  key={player.intentPlaying ? 'pause' : 'play'}
+                  className="grid animate-pop place-items-center"
+                >
+                  <TransportGlyph
+                    name={player.intentPlaying ? 'pause' : 'play'}
+                    className={small ? 'h-10 w-10' : 'h-9 w-9'}
+                  />
+                </span>
+              )}
+            </Ghost>
+            <Ghost label="Next" onClick={() => void player.next()}>
+              <TransportGlyph name="skip" className={small ? 'h-9 w-9' : 'h-8 w-8'} />
+            </Ghost>
+          </div>
+
+          {/* heart + lyrics take the row o-music gives to its volume bar.
+              No circle backgrounds: the active state is a green icon. */}
+          <div className="flex shrink-0 items-center justify-between">
+            <Ghost
+              label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              onClick={onToggleFav}
+              tint={isFavorite ? '#34d399' : undefined}
+            >
+              <Icon name={isFavorite ? 'heartFill' : 'heart'} size={24} />
+            </Ghost>
+            {lyricsSupported !== false ? (
+              <Ghost
+                label={
+                  hasLyrics
+                    ? lyricsTab
+                      ? 'Hide lyrics'
+                      : 'Show lyrics'
+                    : 'No lyrics for this track'
+                }
+                disabled={!hasLyrics}
+                onClick={onToggleLyrics}
+                tint={lyricsTab ? '#34d399' : undefined}
+              >
+                <Icon name="note" size={24} />
+              </Ghost>
+            ) : null}
+          </div>
+
+          {player.error ? (
+            <div className="shrink-0 pt-1 text-xl text-red-300">{player.error}</div>
+          ) : player.external ? (
+            <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -315,6 +360,10 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   // A small copy doubles as the blurred lyrics backdrop (cheap to blur).
   const { url: heroArt } = useCachedArt(t ? (art?.trackArt(t, 800) ?? null) : null);
   const { url: bgArt } = useCachedArt(t ? (art?.trackArt(t, 200) ?? null) : null);
+
+  // Accent color pulled off the cover for the info panel wash + the
+  // play/pause tint, o-music style.
+  const accent = useAccent(heroArt);
 
   // Lyrics need server >= 10.9; hide the toggle entirely on older servers.
   useEffect(() => {
@@ -421,6 +470,8 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
       onToggleLyrics={() => setLyricsTab(v => !v)}
       lyricsSupported={lyricsSupported}
       hasLyrics={lyrics.state === 'synced' || lyrics.state === 'plain'}
+      accent={accent}
+      bgArtUrl={bgArt}
     />
   );
 
