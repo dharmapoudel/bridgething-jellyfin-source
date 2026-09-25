@@ -1,3 +1,8 @@
+## 0.1.38
+- Seek bar fixed: dragging the seek bar fired a seekTo per pointer-move and tripped the daemon's Bluetooth rate limiter ("Rate limit exceeded" error overlay). The bar now follows the finger locally and sends exactly one seek on release; player.seekTo additionally paces phone-bound sends (800ms trailing window) so rapid taps can never trip the limiter either.
+- Auto-advance fixed after Bluetooth drops: if the track ended mid-outage (our clock parked at the duration cap), the reconnect heal used to seek the phone back to the very end of the finished track and strand it there. It now advances to the next track instead — the lost auto-advance.
+- Lyrics tab is now a sticky preference: it stays on across track changes, showing the album art for tracks with no lyrics and switching back to lyrics automatically when a track with lyrics comes up.
+
 ## 0.1.37
 - Now Playing action row: lyrics and heart swapped positions (lyrics left, heart right), and both icons are now translucent when inactive — the active state stays a solid green icon.
 

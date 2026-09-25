@@ -574,6 +574,10 @@ export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
   usePlayer();
   const barRef = useRef<HTMLDivElement>(null);
   const [, force] = useState(0);
+  // While the finger is down the bar follows it locally; the phone hears
+  // about the seek exactly once, on release. Firing a seek per pointermove
+  // trips the daemon's rate limiter ("Rate limit exceeded" error overlay).
+  const [dragMs, setDragMs] = useState<number | null>(null);
   const dur = player.trackDurationMs;
 
   useEffect(() => {
@@ -587,14 +591,17 @@ export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
     return () => cancelAnimationFrame(raf);
   }, [player.intentPlaying]);
 
-  const ratio = dur > 0 ? Math.min(1, Math.max(0, player.positionNow() / dur)) : 0;
+  // The position the bar (and times) show: the finger while dragging, the
+  // player clock otherwise.
+  const shown = dragMs ?? player.positionNow();
+  const ratio = dur > 0 ? Math.min(1, Math.max(0, shown / dur)) : 0;
 
-  const seekFromEvent = (clientX: number): void => {
+  const msFromEvent = (clientX: number): number | null => {
     const el = barRef.current;
-    if (!el || dur <= 0) return;
+    if (!el || dur <= 0) return null;
     const r = el.getBoundingClientRect();
     const p = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
-    onSeek(p * dur);
+    return p * dur;
   };
 
   return (
@@ -605,17 +612,26 @@ export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
         aria-label="Seek"
         aria-valuemin={0}
         aria-valuemax={Math.round(dur)}
-        aria-valuenow={Math.round(player.positionNow())}
+        aria-valuenow={Math.round(shown)}
         // slim o-music-style rail: 3px track, 12px dot. The -my-3/py-3 keeps
         // a 48px touch target while the layout footprint stays 24px.
         className="relative -my-3 flex h-6 w-full cursor-pointer touch-none items-center py-3"
         onPointerDown={e => {
-          (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-          seekFromEvent(e.clientX);
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+          const ms = msFromEvent(e.clientX);
+          if (ms !== null) setDragMs(ms);
         }}
         onPointerMove={e => {
-          if (e.buttons) seekFromEvent(e.clientX);
+          if (dragMs === null) return;
+          const ms = msFromEvent(e.clientX);
+          if (ms !== null) setDragMs(ms);
         }}
+        onPointerUp={e => {
+          const ms = msFromEvent(e.clientX) ?? dragMs;
+          setDragMs(null);
+          if (ms !== null) onSeek(ms);
+        }}
+        onPointerCancel={() => setDragMs(null)}
       >
         <div className="absolute top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full bg-white/18">
           <div
@@ -639,8 +655,8 @@ export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
         />
       </div>
       <div className="mt-2 flex justify-between font-mono text-[0.75rem] tabular-nums text-white/35">
-        <span>{fmtTime(player.positionNow())}</span>
-        <span>-{fmtTime(Math.max(0, dur - player.positionNow()))}</span>
+        <span>{fmtTime(shown)}</span>
+        <span>-{fmtTime(Math.max(0, dur - shown))}</span>
       </div>
     </div>
   );

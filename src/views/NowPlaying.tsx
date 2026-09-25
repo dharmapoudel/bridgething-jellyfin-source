@@ -171,7 +171,7 @@ function Clock() {
 function InfoPanel({
   isFavorite,
   onToggleFav,
-  lyricsTab,
+  lyricsVisible,
   onToggleLyrics,
   lyricsSupported,
   hasLyrics,
@@ -180,7 +180,7 @@ function InfoPanel({
 }: {
   isFavorite: boolean;
   onToggleFav: () => void;
-  lyricsTab: boolean;
+  lyricsVisible: boolean;
   onToggleLyrics: () => void;
   lyricsSupported: boolean | null;
   hasLyrics: boolean;
@@ -280,15 +280,15 @@ function InfoPanel({
               <Ghost
                 label={
                   hasLyrics
-                    ? lyricsTab
+                    ? lyricsVisible
                       ? 'Hide lyrics'
                       : 'Show lyrics'
                     : 'No lyrics for this track'
                 }
                 disabled={!hasLyrics}
                 onClick={onToggleLyrics}
-                tint={lyricsTab ? '#34d399' : undefined}
-                className={lyricsTab ? '' : 'opacity-40'}
+                tint={lyricsVisible ? '#34d399' : undefined}
+                className={lyricsVisible ? '' : 'opacity-40'}
               >
                 <Icon name="note" size={24} />
               </Ghost>
@@ -339,6 +339,13 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
     };
   }, []);
 
+  // The lyrics tab is a sticky preference, not per-track state: it stays on
+  // across track changes, and the panel simply shows the album art for
+  // tracks that have no lyrics, switching back to lyrics on its own when a
+  // track with lyrics comes up.
+  const hasLyrics = lyrics.state === 'synced' || lyrics.state === 'plain';
+  const showLyrics = lyricsTab && hasLyrics;
+
   // A swipe down starting near the top edge minimizes back to the mini
   // player. Touches inside the lyrics panel are left alone so the lyrics
   // keep scrolling instead of minimizing.
@@ -353,7 +360,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
     const p = e.changedTouches[0];
     const dy = p.clientY - s.y;
     const dx = p.clientX - s.x;
-    if (lyricsTab && artPanelRef.current?.contains(e.target as Node)) return;
+    if (showLyrics && artPanelRef.current?.contains(e.target as Node)) return;
     if (s.y < window.innerHeight * 0.3 && dy > 70 && Math.abs(dx) < 60) {
       onMinimize();
     }
@@ -410,11 +417,6 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
     };
   }, [jf, trackId, lyricsSupported]);
 
-  // A new track gets a fresh lyrics tab; the panel fetches lazily on open.
-  useEffect(() => {
-    setLyricsTab(false);
-  }, [trackId]);
-
   const toggleFav = (): void => {
     if (!t) return;
     const want = !t.isFavorite;
@@ -442,7 +444,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
     );
   }
 
-  const artPanel = lyricsTab ? (
+  const artPanel = showLyrics ? (
     <div className="relative h-full w-full overflow-hidden bg-[#14161c]">
       {bgArt ? (
         <img
@@ -489,10 +491,10 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
     <InfoPanel
       isFavorite={t.isFavorite}
       onToggleFav={toggleFav}
-      lyricsTab={lyricsTab}
+      lyricsVisible={showLyrics}
       onToggleLyrics={() => setLyricsTab(v => !v)}
       lyricsSupported={lyricsSupported}
-      hasLyrics={lyrics.state === 'synced' || lyrics.state === 'plain'}
+      hasLyrics={hasLyrics}
       accent={accent}
       bgArtUrl={bgArt}
     />

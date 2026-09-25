@@ -28,6 +28,11 @@ const RECONNECT_HEAL_MIN_MS = 15_000; // only heal when we're well into the trac
 const RECONNECT_SETTLE_MS = 2500; // let the phone finish restarting first
 const RECONNECT_WATCH_MS = 10_000; // watch post-reconnect snapshots for a late restart
 const RESTART_GAP_MS = 10_000; // phone this far behind us => it restarted
+// The daemon rate-limits player.seekTo (every call crosses the Bluetooth
+// link): pace the phone-bound sends so scrubbing can never trip
+// "Rate limit exceeded". The local clock updates instantly; only the send
+// is paced, trailing-edge, so a flurry of seeks collapses into one.
+const SEEK_PACE_MS = 800;
 
 export interface PersistedQueue {
   tracks: Track[];
@@ -69,6 +74,9 @@ export class PlaybackEngine {
   private sessionId = '';
   private progressTimer: number | null = null;
   private lastPauseAt = 0;
+  private lastSeekSentAt = 0;
+  private pendingSeekMs: number | null = null;
+  private seekSendTimer: number | null = null;
   // latest daemon snapshot, for resume reconciliation after an app restart
   private snapSeen = false;
   private snapTrackId: string | null = null;
@@ -278,11 +286,22 @@ export class PlaybackEngine {
     this.positionMs = clamped;
     this.positionAt = Date.now();
     this.emit();
-    try {
-      await getClient().player.seekTo({ positionMs: Math.round(clamped) });
-    } catch {
-      // best effort
-    }
+    // Pace the phone-bound send (see SEEK_PACE_MS). A seek scheduled for a
+    // track that is no longer current when the timer fires is dropped.
+    const trackId = t.id;
+    this.pendingSeekMs = clamped;
+    if (this.seekSendTimer !== null) return; // one already scheduled; it takes the latest
+    const wait = Math.max(0, SEEK_PACE_MS - (Date.now() - this.lastSeekSentAt));
+    this.seekSendTimer = window.setTimeout(() => {
+      this.seekSendTimer = null;
+      const target = this.pendingSeekMs;
+      this.pendingSeekMs = null;
+      if (target === null || this.current()?.id !== trackId) return;
+      this.lastSeekSentAt = Date.now();
+      getClient().player.seekTo({ positionMs: Math.round(target) }).catch(() => {
+        // best effort; the next snapshot corrects the UI
+      });
+    }, wait);
   }
 
   setShuffle(on: boolean): void {
@@ -370,12 +389,21 @@ export class PlaybackEngine {
     // the phone's restarted (~0) position before the timer fires, which
     // would make positionNow() lie at heal time.
     const target = this.positionNow();
+    // If our clock is parked at the duration cap, the track ended while the
+    // link was down (its "stopped" never reached us). Seeking the phone back
+    // to the very end would strand it there with no next track; advance the
+    // queue instead — this is the lost auto-advance.
+    const trackEnded = t.durationMs > 0 && target >= t.durationMs;
     this.healTimer = window.setTimeout(() => {
       this.healTimer = null;
       if (!this.intentPlaying || this.external) return;
       const cur = this.current();
       if (!cur || cur.id !== trackId) return;
       if (this.lastSnapAt > this.lastReconnectAt && this.snapPositionMs >= RECONNECT_HEAL_MIN_MS) return;
+      if (trackEnded) {
+        void this.next(true);
+        return;
+      }
       void this.seekTo(target);
     }, RECONNECT_SETTLE_MS);
   }
@@ -437,9 +465,17 @@ export class PlaybackEngine {
       ) {
         const trackId = this.current()?.id;
         const target = oursBefore;
+        // Same lost-auto-advance case as handleGateway: our clock parked at
+        // the duration cap means the track ended mid-outage.
+        const durMs = this.current()?.durationMs ?? 0;
+        const ended = durMs > 0 && target >= durMs;
         window.setTimeout(() => {
           if (!this.intentPlaying || this.external) return;
           if (this.current()?.id !== trackId) return;
+          if (ended) {
+            void this.next(true);
+            return;
+          }
           void this.seekTo(target);
         }, RECONNECT_SETTLE_MS);
       }
