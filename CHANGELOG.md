@@ -1,3 +1,8 @@
+## 0.1.25
+
+- Now Playing redesign: blurred album-art backdrop; the volume bar is gone, replaced by a slim action rail with love (favorite) + lyrics buttons; album art sits left and the lyrics toggle swaps the art panel for tick-by-tick synced lyrics; a slim bottom-center bar (tap or swipe up) opens the queue sheet; the device Clock is removed from the info column and an "UP NEXT" card (tap to open the queue) sits top-right.
+- The Now Playing screen now holds the Glass Overlay ambient screensaver off while it's up (requires Glassy Overlay 0.3.27+): it signals the overlay through a `bridgething:ambient-inhibit` DOM event plus a sticky `window.__bridgethingAmbientInhibit` flag, cleared on unmount. This replaces the old synthetic-pointermove keepalive that only covered the lyrics tab.
+
 ## 0.1.24
 
 - Removed the "Resume listening" banner from the Home screen.
