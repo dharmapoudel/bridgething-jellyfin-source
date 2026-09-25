@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getClient } from './client';
-import { ArtCtx, Icon, MiniPlayer, useMenu, usePlayer, usePortrait, type ArtResolver, type MenuAction } from './components';
+import { ArtCtx, Icon, useMenu, usePlayer, usePortrait, type ArtResolver, type MenuAction } from './components';
 import { JellyfinClient, type Creds } from './jellyfin';
 import { player } from './player';
 import type { View } from './nav';
@@ -8,6 +8,7 @@ import Detail from './views/Detail';
 import Home from './views/Home';
 import Library from './views/Library';
 import NowPlaying from './views/NowPlaying';
+import { QueueHandle, QueueSheet } from './QueueSheet';
 import Queue from './views/Queue';
 import Setup, { CREDS_KEY, type StoredCreds } from './views/Setup';
 
@@ -60,6 +61,7 @@ export default function App() {
   const [credsState, setCredsState] = useState<'loading' | 'missing' | 'ready'>('loading');
   const [jf, setJf] = useState<JellyfinClient | null>(null);
   const [stack, setStack] = useState<View[]>([{ name: 'home' }]);
+  const [queueOpen, setQueueOpen] = useState(false);
   const [daemonUp, setDaemonUp] = useState(true);
   const menu = useMenu();
   usePlayer();
@@ -68,8 +70,8 @@ export default function App() {
   const view = stack[stack.length - 1];
   const viewRef = useRef(view);
   viewRef.current = view;
-  // Where the mini player was opened from; the Now Playing screen
-  // minimizes back here (its nav replaces the stack, so back() can't).
+  // Where Now Playing was opened from; it minimizes back here
+  // (its nav replaces the stack, so back() can't).
   const returnViewRef = useRef<View>({ name: 'home' });
 
   const load = useCallback(async () => {
@@ -142,7 +144,7 @@ export default function App() {
     // bottom-nav destinations replace the stack; drill-ins push
     const cur = viewRef.current;
     // The stack is replaced (not pushed) when opening Now Playing, so
-    // remember where the mini player was tapped to minimize back to it.
+    // remember where it was opened from to minimize back to it.
     if (
       v.name === 'nowplaying' &&
       cur.name !== 'nowplaying' &&
@@ -279,14 +281,16 @@ export default function App() {
 
   return (
     <ArtCtx.Provider value={artResolver}>
-      <div className="flex h-full w-full flex-col bg-zinc-950 text-white">
+      <div className="relative flex h-full w-full flex-col bg-zinc-950 text-white">
         {!daemonUp ? (
           <div className="flex h-12 shrink-0 items-center justify-center bg-red-900/80 text-lg">
             Lost connection to the device. Reconnect to continue.
           </div>
         ) : null}
         <div className="relative min-h-0 flex-1">{renderView()}</div>
-        {showChrome && current ? <MiniPlayer onOpen={() => nav({ name: 'nowplaying' })} /> : null}
+        {/* Queue bar on every screen while a song is playing; the mini player is gone. */}
+        {current ? <QueueHandle onOpen={() => setQueueOpen(true)} /> : null}
+        {queueOpen ? <QueueSheet onClose={() => setQueueOpen(false)} /> : null}
         {showChrome ? (
           // In portrait the physical knob overlaps the bottom-right corner, so
           // the nav floats above it instead of sitting flush at the bottom.

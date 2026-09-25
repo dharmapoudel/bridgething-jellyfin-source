@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type TouchEvent as RTouchEvent } from 'react';
-import { Artwork, Icon, IconBtn, ProgressBar, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
+import { Icon, IconBtn, ProgressBar, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
 import type { LyricLineVM } from '../jellyfin';
 import { player } from '../player';
 import type { ViewProps } from '../nav';
@@ -238,133 +238,11 @@ function InfoPanel({
   );
 }
 
-// The small, almost-transparent bar at the bottom center. Swipe up (or tap)
-// opens the queue sheet.
-function QueueHandle({ onOpen }: { onOpen: () => void }) {
-  const startY = useRef<number | null>(null);
-  return (
-    <button
-      type="button"
-      aria-label="Open queue"
-      onClick={onOpen}
-      onTouchStart={e => {
-        startY.current = e.touches[0].clientY;
-      }}
-      onTouchEnd={e => {
-        const s = startY.current;
-        startY.current = null;
-        if (s !== null && s - e.changedTouches[0].clientY > 50) onOpen();
-      }}
-      className="absolute bottom-1 left-1/2 z-20 -translate-x-1/2 p-3"
-    >
-      <div className="h-1.5 w-12 rounded-full bg-white/15" />
-    </button>
-  );
-}
-
-// Queue as a bottom sheet over Now Playing. Swipe down on the grabber or tap
-// the backdrop to close — no close button. Touches are contained so the
-// root's minimize gesture never fires from inside the sheet.
-function QueueSheet({ onClose }: { onClose: () => void }) {
-  usePlayer();
-  const art = useArt();
-  const upcoming = player.queue.slice(player.index + 1);
-  const current = player.current();
-  const grab = useRef<{ y: number } | null>(null);
-
-  return (
-    <div
-      className="absolute inset-0 z-30"
-      onTouchStart={e => e.stopPropagation()}
-      onTouchEnd={e => e.stopPropagation()}
-    >
-      <button type="button" aria-label="Close queue" onClick={onClose} className="absolute inset-0 bg-black/50" />
-      <div className="absolute inset-x-0 bottom-0 top-[10%] flex flex-col overflow-hidden rounded-t-3xl bg-[#171a21]/95 shadow-2xl backdrop-blur-xl">
-        <div
-          className="shrink-0 px-6 pt-3 pb-1"
-          onTouchStart={e => {
-            grab.current = { y: e.touches[0].clientY };
-          }}
-          onTouchEnd={e => {
-            const g = grab.current;
-            grab.current = null;
-            if (g && e.changedTouches[0].clientY - g.y > 60) onClose();
-          }}
-        >
-          <div className="mx-auto h-1.5 w-16 rounded-full bg-white/30" />
-        </div>
-        <div className="flex shrink-0 items-center justify-between px-6 py-2">
-          <h2 className="text-2xl font-bold">Up next{upcoming.length ? ` (${upcoming.length})` : ''}</h2>
-          {upcoming.length ? (
-            <button
-              type="button"
-              onClick={() => player.clearQueue()}
-              className="h-12 rounded-full bg-white/10 px-5 text-lg text-red-300 active:bg-white/20"
-            >
-              Clear
-            </button>
-          ) : null}
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-          {current ? (
-            <div className="mb-2 flex items-center gap-3 rounded-2xl bg-leaf/10 p-2">
-              <Artwork src={art?.trackArt(current, 200) ?? null} size={56} rounded="rounded-lg" label={current.album} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xl font-medium text-leaf">{current.name}</div>
-                <div className="truncate text-base text-white/50">Now playing · {current.artist}</div>
-              </div>
-              <IconBtn size={56} label={player.intentPlaying ? 'Pause' : 'Play'} onClick={() => void player.toggle()}>
-                <Icon name={player.intentPlaying ? 'pause' : 'play'} size={28} />
-              </IconBtn>
-            </div>
-          ) : null}
-          {upcoming.length === 0 ? (
-            <div className="flex items-center justify-center px-8 py-10 text-center text-xl text-white/40">
-              {current ? 'The queue ends here.' : 'The queue is empty. Play something from your library.'}
-            </div>
-          ) : (
-            upcoming.map((t, i) => {
-              const qi = player.index + 1 + i;
-              return (
-                <div
-                  key={`${t.id}-${qi}`}
-                  className="flex min-h-16 items-center gap-3 rounded-xl px-2 py-1.5 active:bg-white/8"
-                >
-                  <button
-                    type="button"
-                    onClick={() => void player.jumpTo(qi)}
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                  >
-                    <Artwork src={art?.trackArt(t, 200) ?? null} size={52} rounded="rounded-lg" label={t.album} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xl leading-tight">{t.name}</span>
-                      <span className="block truncate text-base leading-tight text-white/50">{t.artist}</span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${t.name} from queue`}
-                    onClick={() => player.removeAt(qi)}
-                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white/50 active:bg-white/15"
-                  >
-                    <Icon name="x" size={26} />
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMinimize: () => void }) {
   usePlayer();
   const art = useArt();
   const portrait = usePortrait();
   const [lyricsTab, setLyricsTab] = useState(false);
-  const [queueOpen, setQueueOpen] = useState(false);
   const [lyricsSupported, setLyricsSupported] = useState<boolean | null>(null);
   const [lyrics, setLyrics] = useState<LyricsState>({ state: 'loading' });
   const t = player.current();
@@ -387,14 +265,12 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
 
   // A swipe down starting near the top edge minimizes back to the mini
   // player. Touches inside the lyrics panel are left alone so the lyrics
-  // keep scrolling instead of minimizing. Disabled while the queue sheet
-  // is open — the sheet owns its own gestures.
+  // keep scrolling instead of minimizing.
   const onTouchStart = (e: RTouchEvent): void => {
     const p = e.touches[0];
     touchStart.current = { x: p.clientX, y: p.clientY };
   };
   const onTouchEnd = (e: RTouchEvent): void => {
-    if (queueOpen) return;
     const s = touchStart.current;
     touchStart.current = null;
     if (!s) return;
@@ -520,9 +396,6 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
     />
   );
 
-  const openQueue = (): void => setQueueOpen(true);
-  const closeQueue = (): void => setQueueOpen(false);
-
   if (portrait) {
     return (
       <div className="relative flex h-full flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
@@ -530,8 +403,6 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
           {artPanel}
         </div>
         <div className="min-h-0 flex-1">{infoPanel}</div>
-        <QueueHandle onOpen={openQueue} />
-        {queueOpen ? <QueueSheet onClose={closeQueue} /> : null}
       </div>
     );
   }
@@ -542,8 +413,6 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
         {artPanel}
       </div>
       <div className="h-full min-w-0 flex-1">{infoPanel}</div>
-      <QueueHandle onOpen={openQueue} />
-      {queueOpen ? <QueueSheet onClose={closeQueue} /> : null}
     </div>
   );
 }

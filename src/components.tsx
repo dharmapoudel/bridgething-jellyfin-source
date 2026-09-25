@@ -415,61 +415,6 @@ export function TrackRow({
   );
 }
 
-// ---- mini player ----
-
-export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
-  usePlayer();
-  const art = useArt();
-  const [, force] = useState(0);
-  const t = player.current();
-  const dur = player.trackDurationMs;
-
-  // Tick the progress ring while playing; snapshots alone are too sparse.
-  useEffect(() => {
-    if (!player.intentPlaying) return;
-    const id = window.setInterval(() => force(n => n + 1), 500);
-    return () => window.clearInterval(id);
-  }, [player.intentPlaying]);
-
-  if (!t) return null;
-  const ratio = dur > 0 ? Math.min(1, Math.max(0, player.positionNow() / dur)) : 0;
-  const ringLen = 2 * Math.PI * 28;
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex h-20 w-full shrink-0 items-center gap-3 border-t border-white/10 bg-zinc-950/95 px-3 text-left active:bg-zinc-900"
-    >
-      <Artwork src={art?.trackArt(t, 200) ?? null} size={56} rounded="rounded-lg" label={t.album} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xl leading-tight font-medium">{t.name}</span>
-        <span className="block truncate text-base leading-tight text-white/50">{t.artist}</span>
-      </span>
-      {player.loading ? (
-        <span className="h-8 w-8 animate-spin rounded-full border-3 border-white/15 border-t-gold" />
-      ) : (
-        <span className="relative flex h-16 w-16 shrink-0 items-center justify-center text-white/90">
-          <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
-            <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="5" />
-            <circle
-              cx="32"
-              cy="32"
-              r="28"
-              fill="none"
-              stroke="#34d399"
-              strokeWidth="5"
-              strokeLinecap="round"
-              strokeDasharray={ringLen}
-              strokeDashoffset={ringLen * (1 - ratio)}
-            />
-          </svg>
-          <Icon name={player.intentPlaying ? 'pause' : 'play'} size={30} />
-        </span>
-      )}
-    </button>
-  );
-}
-
 // ---- progress bar with tap/drag seek ----
 
 export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {

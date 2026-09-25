@@ -1,3 +1,10 @@
+## 0.1.27
+
+- The mini now-playing bar is gone. Instead, the small transparent queue
+  bar now shows at the bottom of EVERY screen while a song is playing
+  (tap or swipe up opens the queue sheet). The queue bar/sheet moved from
+  the Now Playing view to the app root so it's always available.
+
 ## 0.1.26
 
 - Now Playing reverts to the pre-0.1.25 layout (album art left, info panel
