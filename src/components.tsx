@@ -269,28 +269,52 @@ export function Artwork({
   rounded?: string;
   label?: string;
 }) {
-  const { url, failed } = useCachedArt(src);
-  if (!src || failed || !url) {
-    return (
-      <div
-        className={`flex shrink-0 items-center justify-center bg-white/8 text-white/25 ${rounded}`}
-        style={{ width: size, height: size }}
-        aria-label={label}
-      >
-        <Icon name="note" size={Math.round(size * 0.4)} />
-      </div>
+  const ref = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState(false);
+  // Lazy-load: only fetch artwork when the tile is near the viewport. The
+  // library grid mounts hundreds of tiles at once; without this every one of
+  // them fires a Bluetooth-tunnelled image fetch on mount and the burst knocks
+  // the phone link over. The 400px margin preloads just ahead of scroll.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setNear(true);
+      return;
+    }
+    const ob = new IntersectionObserver(
+      entries => {
+        if (entries.some(e => e.isIntersecting)) {
+          setNear(true);
+          ob.disconnect();
+        }
+      },
+      { rootMargin: '400px' },
     );
-  }
+    ob.observe(el);
+    return () => ob.disconnect();
+  }, []);
+  const { url, failed } = useCachedArt(near ? src : null);
   return (
-    <img
-      src={url}
-      width={size}
-      height={size}
-      draggable={false}
-      className={`shrink-0 object-cover ${rounded}`}
-      style={{ width: size, height: size }}
-      alt={label}
-    />
+    <div ref={ref} className="shrink-0" style={{ width: size, height: size }}>
+      {!src || failed || !url ? (
+        <div
+          className={`flex h-full w-full items-center justify-center bg-white/8 text-white/25 ${rounded}`}
+          aria-label={label}
+        >
+          <Icon name="note" size={Math.round(size * 0.4)} />
+        </div>
+      ) : (
+        <img
+          src={url}
+          width={size}
+          height={size}
+          draggable={false}
+          className={`h-full w-full object-cover ${rounded}`}
+          alt={label}
+        />
+      )}
+    </div>
   );
 }
 

@@ -1,3 +1,12 @@
+## 0.1.30
+
+- Bluetooth fix, round 2: artwork is now lazy-loaded — a tile only fetches
+  its image when it scrolls near the viewport (400px preload margin). The
+  library grid mounts hundreds of tiles at once and every one of them was
+  firing a Bluetooth-tunnelled image fetch on mount, which kept knocking
+  the phone link over. Combined with the 0.1.28 concurrency gate (max 4 in
+  flight), the library now sips images instead of flooding them.
+
 ## 0.1.29
 
 - Tapping a song (or Play/Shuffle/Instant Mix anywhere) now opens the Now
