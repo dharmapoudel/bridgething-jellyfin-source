@@ -148,9 +148,10 @@ function Clock() {
   return <div className="text-lg text-white/60">{s}</div>;
 }
 
-// Right-hand info column: clock, title/artist, progress with times,
-// transport, then heart + lyrics where the reference puts its volume bar —
-// the Spotify Car Thing arrangement.
+// Right-hand info column in the Spotify Car Thing arrangement: clock
+// top-left flush with the content column, title/artist, then the seek bar +
+// transport parked in the lower half, and the heart + lyrics row pinned near
+// the bottom where the reference puts its volume bar (no volume slider).
 function InfoPanel({
   isFavorite,
   onToggleFav,
@@ -173,20 +174,25 @@ function InfoPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#14161c] px-6 py-4">
-      <div className="flex shrink-0 items-center justify-center">
+      {/* clock sits top-left, flush with the content column like the reference */}
+      <div className="shrink-0">
         <Clock />
       </div>
 
-      <div className="mt-1 min-w-0 shrink-0">
+      <div className="mt-2 min-w-0 shrink-0">
         <div className="truncate text-3xl font-bold text-white">{t.name}</div>
         <div className="mt-0.5 truncate text-2xl text-white/60">{t.artist}</div>
       </div>
 
-      <div className="mt-3 shrink-0">
+      {/* the reference parks the seek bar + transport in the lower half of
+          the panel, with the action row pinned near the bottom */}
+      <div className="min-h-2 flex-[3]" />
+
+      <div className="shrink-0">
         <ProgressBar onSeek={ms => void player.seekTo(ms)} />
       </div>
 
-      <div className="mt-1 flex shrink-0 items-center justify-center gap-6">
+      <div className="mt-2 flex shrink-0 items-center justify-center gap-6">
         <IconBtn size={64} label="Previous" onClick={() => void player.prev()}>
           <Icon name="prev" size={36} />
         </IconBtn>
@@ -207,7 +213,9 @@ function InfoPanel({
         </IconBtn>
       </div>
 
-      <div className="mt-auto flex shrink-0 items-center justify-center gap-8 pt-2">
+      <div className="min-h-2 flex-[1]" />
+
+      <div className="flex shrink-0 items-center justify-center gap-8">
         <IconBtn
           size={56}
           label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}

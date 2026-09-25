@@ -1,3 +1,15 @@
+## 0.1.31
+
+- Now Playing info panel matches the Spotify Car Thing reference alignment:
+  the clock sits top-left flush with the content column (it was centered),
+  and the seek bar + transport are parked in the lower half with the
+  heart/lyrics row near the bottom.
+- Queue sheet: drag down anywhere on the panel to close it (the sheet
+  follows your finger, backdrop fades); the track list still scrolls
+  normally — the drag only takes over when the list is at the top.
+- Tapping the now-playing card at the top of the queue sheet opens the Now
+  Playing screen.
+
 ## 0.1.30
 
 - Bluetooth fix, round 2: artwork is now lazy-loaded — a tile only fetches

@@ -290,7 +290,15 @@ export default function App() {
         <div className="relative min-h-0 flex-1">{renderView()}</div>
         {/* Queue bar on every screen while a song is playing; the mini player is gone. */}
         {current ? <QueueHandle onOpen={() => setQueueOpen(true)} /> : null}
-        {queueOpen ? <QueueSheet onClose={() => setQueueOpen(false)} /> : null}
+        {queueOpen ? (
+          <QueueSheet
+            onClose={() => setQueueOpen(false)}
+            onOpenNowPlaying={() => {
+              setQueueOpen(false);
+              nav({ name: 'nowplaying' });
+            }}
+          />
+        ) : null}
         {showChrome ? (
           // In portrait the physical knob overlaps the bottom-right corner, so
           // the nav floats above it instead of sitting flush at the bottom.

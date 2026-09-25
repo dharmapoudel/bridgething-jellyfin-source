@@ -26,30 +26,75 @@ export function QueueHandle({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-// Queue as a bottom sheet over the whole app. Swipe down on the grabber or
-// tap the backdrop to close — no close button.
-export function QueueSheet({ onClose }: { onClose: () => void }) {
+// Queue as a bottom sheet over the whole app. Drag down anywhere on the
+// panel (or tap the backdrop) to close — no close button. Tapping the
+// now-playing card opens the Now Playing screen.
+export function QueueSheet({ onClose, onOpenNowPlaying }: { onClose: () => void; onOpenNowPlaying: () => void }) {
   usePlayer();
   const art = useArt();
   const upcoming = player.queue.slice(player.index + 1);
   const current = player.current();
-  const grab = useRef<{ y: number } | null>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLButtonElement>(null);
+  const drag = useRef<{ startY: number; dy: number; active: boolean } | null>(null);
+
+  const setDragOffset = (dy: number, animate: boolean): void => {
+    const sheet = sheetRef.current;
+    const backdrop = backdropRef.current;
+    if (!sheet) return;
+    sheet.style.transition = animate ? 'transform 180ms ease-out' : 'none';
+    sheet.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+    if (backdrop) backdrop.style.opacity = dy > 0 ? String(Math.max(0, 1 - dy / 500)) : '';
+  };
 
   return (
     <div className="absolute inset-0 z-30">
-      <button type="button" aria-label="Close queue" onClick={onClose} className="absolute inset-0 bg-black/50" />
-      <div className="absolute inset-x-0 bottom-0 top-[10%] flex flex-col overflow-hidden rounded-t-3xl bg-[#171a21]/95 shadow-2xl backdrop-blur-xl">
-        <div
-          className="shrink-0 px-6 pt-3 pb-1"
-          onTouchStart={e => {
-            grab.current = { y: e.touches[0].clientY };
-          }}
-          onTouchEnd={e => {
-            const g = grab.current;
-            grab.current = null;
-            if (g && e.changedTouches[0].clientY - g.y > 60) onClose();
-          }}
-        >
+      <button
+        ref={backdropRef}
+        type="button"
+        aria-label="Close queue"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/50"
+      />
+      <div
+        ref={sheetRef}
+        className="absolute inset-x-0 bottom-0 top-[10%] flex flex-col overflow-hidden rounded-t-3xl bg-[#171a21]/95 shadow-2xl backdrop-blur-xl"
+        onTouchStart={e => {
+          // A drag that starts in the track list only becomes a sheet drag
+          // when the list is already scrolled to the top; otherwise the list
+          // keeps scrolling normally.
+          const list = listRef.current;
+          const inList = !!list && list.contains(e.target as Node);
+          drag.current = {
+            startY: e.touches[0].clientY,
+            dy: 0,
+            active: !inList || (list?.scrollTop ?? 0) <= 0,
+          };
+        }}
+        onTouchMove={e => {
+          const d = drag.current;
+          if (!d?.active) return;
+          const dy = e.touches[0].clientY - d.startY;
+          d.dy = Math.max(0, dy);
+          setDragOffset(d.dy, false);
+        }}
+        onTouchEnd={() => {
+          const d = drag.current;
+          drag.current = null;
+          if (!d) return;
+          if (d.active && d.dy > 110) {
+            onClose();
+          } else {
+            setDragOffset(0, true);
+          }
+        }}
+        onTouchCancel={() => {
+          drag.current = null;
+          setDragOffset(0, true);
+        }}
+      >
+        <div className="shrink-0 px-6 pt-3 pb-1">
           <div className="mx-auto h-1.5 w-16 rounded-full bg-white/30" />
         </div>
         <div className="flex shrink-0 items-center justify-between px-6 py-2">
@@ -64,14 +109,28 @@ export function QueueSheet({ onClose }: { onClose: () => void }) {
             </button>
           ) : null}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6" ref={listRef}>
           {current ? (
             <div className="mb-2 flex items-center gap-3 rounded-2xl bg-leaf/10 p-2">
-              <Artwork src={art?.trackArt(current, 200) ?? null} size={56} rounded="rounded-lg" label={current.album} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xl font-medium text-leaf">{current.name}</div>
-                <div className="truncate text-base text-white/50">Now playing · {current.artist}</div>
-              </div>
+              <button
+                type="button"
+                onClick={onOpenNowPlaying}
+                aria-label={`Open Now Playing for ${current.name}`}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left active:bg-white/8"
+              >
+                <Artwork
+                  src={art?.trackArt(current, 200) ?? null}
+                  size={56}
+                  rounded="rounded-lg"
+                  label={current.album}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xl font-medium text-leaf">{current.name}</span>
+                  <span className="block truncate text-base text-white/50">
+                    Now playing · {current.artist}
+                  </span>
+                </span>
+              </button>
               <IconBtn size={56} label={player.intentPlaying ? 'Pause' : 'Play'} onClick={() => void player.toggle()}>
                 <Icon name={player.intentPlaying ? 'pause' : 'play'} size={28} />
               </IconBtn>
