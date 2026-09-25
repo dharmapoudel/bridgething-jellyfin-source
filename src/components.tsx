@@ -137,6 +137,10 @@ export function cancelWarmArt(): void {
 export function useCachedArt(src: string | null): { url: string | null; failed: boolean } {
   const [obj, setObj] = useState<string | null>(() => (src ? (artObjects.get(src) ?? null) : null));
   const [failed, setFailed] = useState(false);
+  // When the phone link returns after a drop, retry artwork that failed
+  // mid-outage (the common "tile stuck on the note icon" case). Cache hits
+  // return instantly below, so only missing/failed art re-hits the network.
+  const linkGen = useLinkGen();
   useEffect(() => {
     if (!src) {
       setObj(null);
@@ -159,7 +163,8 @@ export function useCachedArt(src: string | null): { url: string | null; failed: 
     return () => {
       dead = true;
     };
-  }, [src]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, linkGen]);
   return { url: obj, failed };
 }
 
@@ -178,6 +183,24 @@ export function usePlayer(): number {
     useCallback((fn: () => void) => player.subscribe(fn), []),
     () => player.revision,
   );
+}
+
+// Bumps whenever the phone's Bluetooth link drops or reconnects. Views use
+// it to retry loads that failed mid-outage (artwork, lists) once the link is
+// back, instead of parking on a failed placeholder forever.
+export function useLinkGen(): number {
+  const [gen, setGen] = useState(() => player.linkGeneration);
+  useEffect(() => player.onLink(() => setGen(player.linkGeneration)), []);
+  return gen;
+}
+
+// The daemon's raw transport errors ("network error: Handler failed |
+// reason: 'Transport Channel Closed'") mean the phone link dropped
+// mid-request. Say that instead of surfacing plumbing to the user.
+export function friendlyError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e ?? 'could not load');
+  if (/transport channel closed/i.test(msg)) return 'The phone link dropped while loading.';
+  return msg;
 }
 
 export function detectPortrait(): boolean {
@@ -412,8 +435,21 @@ export function Spinner({ label = 'Loading…' }: { label?: string }) {
   );
 }
 
-export function Empty({ text }: { text: string }) {
-  return <div className="flex flex-1 items-center justify-center px-8 text-center text-xl text-white/40">{text}</div>;
+export function Empty({ text, onRetry }: { text: string; onRetry?: () => void }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 text-center">
+      <div className="text-xl text-white/40">{text}</div>
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-2xl bg-white/10 px-8 py-4 text-xl font-bold text-white active:bg-white/20"
+        >
+          Try again
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 // Shown when the server rejected the credentials: the error text plus a way

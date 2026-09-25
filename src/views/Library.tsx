@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
-import { AuthError, Empty, Spinner, Tile, useArt, warmArt, cancelWarmArt } from '../components';
+import { AuthError, Empty, Spinner, Tile, friendlyError, useArt, useLinkGen, warmArt, cancelWarmArt } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Artist, type Genre, type Playlist } from '../jellyfin';
 import type { LibTab, ViewProps } from '../nav';
@@ -22,8 +22,17 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
   const [genres, setGenres] = useState<Genre[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rawError, setRawError] = useState<unknown>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const linkGen = useLinkGen();
 
   useEffect(() => setTab(initialTab), [initialTab]);
+
+  // The phone link dropping mid-load is the common failure here; when it
+  // comes back, retry automatically instead of parking on the error.
+  useEffect(() => {
+    if (linkGen > 0 && error) setRetryKey(k => k + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkGen]);
 
   // Seed each tab from the sticky cache so a cold start paints the last known
   // library instantly; the per-tab refresh below keeps it honest.
@@ -78,7 +87,7 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
             (tab === 'playlists' && playlists) ||
             (tab === 'genres' && genres);
           if (!hasData) {
-            setError(e instanceof Error ? e.message : 'could not load');
+            setError(friendlyError(e));
             setRawError(e);
           }
         }
@@ -89,7 +98,7 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
       dead = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, retryKey]);
 
   const shuffleArtist = (a: Artist, shuffle: boolean): void => {
     jf.artistTracks(a.id)
@@ -145,7 +154,7 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
               onReconnect={() => nav({ name: 'setup' })}
             />
           ) : (
-            <Empty text={`Could not load the library: ${error}`} />
+            <Empty text={`Could not load the library: ${error}`} onRetry={() => setRetryKey(k => k + 1)} />
           )
         ) : tab === 'albums' ? (
           albums ? (

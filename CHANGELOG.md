@@ -1,3 +1,8 @@
+## 0.1.39
+- Link-drop resilience for browsing: tapping a playlist (or anything else) while the phone link drops no longer parks the app on a raw "Transport Channel Closed" error. The message now reads "The phone link dropped while loading.", with a Try again button — and when the link comes back, failed loads retry automatically.
+- Album art recovers after a drop: artwork that failed mid-outage used to sit on the note-icon placeholder forever (including the Now Playing hero). It now refetches when the phone link returns; cache hits return instantly so only missing art re-hits the network.
+- Detail views (album/artist/playlist/genre) now seed from the sticky cache like the Library does: reopening something you have seen before paints instantly, and background refresh failures stay silent.
+
 ## 0.1.38
 - Seek bar fixed: dragging the seek bar fired a seekTo per pointer-move and tripped the daemon's Bluetooth rate limiter ("Rate limit exceeded" error overlay). The bar now follows the finger locally and sends exactly one seek on release; player.seekTo additionally paces phone-bound sends (800ms trailing window) so rapid taps can never trip the limiter either.
 - Auto-advance fixed after Bluetooth drops: if the track ended mid-outage (our clock parked at the duration cap), the reconnect heal used to seek the phone back to the very end of the finished track and strand it there. It now advances to the next track instead — the lost auto-advance.

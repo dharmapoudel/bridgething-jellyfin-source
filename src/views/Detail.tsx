@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { trackActions } from '../actions';
-import { cached } from '../cache';
-import { Artwork, Empty, Icon, Spinner, Tile, TopBar, TrackRow, useArt } from '../components';
+import { cached, stickyGet, stickySet } from '../cache';
+import { Artwork, Empty, Icon, Spinner, Tile, TopBar, TrackRow, friendlyError, useArt, useLinkGen } from '../components';
 import { player } from '../player';
 import type { Album, Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
@@ -12,38 +12,66 @@ interface DetailParams {
   title: string;
 }
 
+interface StickyDetail {
+  tracks: Track[];
+  albums: Album[] | null;
+}
+
 export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & { params: DetailParams }) {
   const art = useArt();
   const [tracks, setTracks] = useState<Track[] | null>(null);
   const [albums, setAlbums] = useState<Album[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const linkGen = useLinkGen();
+
+  // The phone link dropping mid-load is the common failure here; when it
+  // comes back, retry automatically instead of parking on the error.
+  useEffect(() => {
+    if (linkGen > 0 && error) setRetryKey(k => k + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkGen]);
 
   useEffect(() => {
     let dead = false;
-    setTracks(null);
-    setAlbums(null);
+    const skey = `detail:${params.kind}:${params.id}`;
+    // stale detail beats a spinner: seed from the sticky cache, then
+    // revalidate in the background and overwrite on success.
+    const sticky = stickyGet<StickyDetail>(skey);
+    if (sticky) {
+      setTracks(sticky.tracks);
+      setAlbums(sticky.albums);
+    } else {
+      setTracks(null);
+      setAlbums(null);
+    }
     setError(null);
     const load = async (): Promise<void> => {
       try {
+        let ts: Track[];
+        let as: Album[] | null = null;
         if (params.kind === 'album') {
-          setTracks(await cached(`detail:album:${params.id}`, () => jf.albumTracks(params.id)));
+          ts = await cached(`detail:album:${params.id}`, () => jf.albumTracks(params.id));
         } else if (params.kind === 'artist') {
-          const [ts, as] = await Promise.all([
+          const [t2, a2] = await Promise.all([
             cached(`detail:artist-tracks:${params.id}`, () => jf.artistTracks(params.id)),
             cached(`detail:artist-albums:${params.id}`, () => jf.artistAlbums(params.id)),
           ]);
-          if (!dead) {
-            setTracks(ts);
-            setAlbums(as);
-          }
-          return;
+          ts = t2;
+          as = a2;
         } else if (params.kind === 'playlist') {
-          setTracks(await cached(`detail:playlist:${params.id}`, () => jf.playlistItems(params.id)));
+          ts = await cached(`detail:playlist:${params.id}`, () => jf.playlistItems(params.id));
         } else {
-          setTracks(await cached(`detail:genre:${params.id}`, () => jf.genreTracks(params.id)));
+          ts = await cached(`detail:genre:${params.id}`, () => jf.genreTracks(params.id));
         }
+        if (dead) return;
+        setTracks(ts);
+        setAlbums(as);
+        setError(null);
+        stickySet(skey, { tracks: ts, albums: as } satisfies StickyDetail);
       } catch (e) {
-        if (!dead) setError(e instanceof Error ? e.message : 'could not load');
+        // refresh failures stay silent when sticky data is showing
+        if (!dead && !sticky) setError(friendlyError(e));
       }
     };
     void load();
@@ -51,7 +79,7 @@ export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & 
       dead = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.id, params.kind]);
+  }, [params.id, params.kind, retryKey]);
 
   const playAll = (shuffle: boolean): void => {
     if (tracks?.length) {
@@ -67,7 +95,7 @@ export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & 
       <TopBar title={params.title} onBack={back} />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {error ? (
-          <Empty text={`Could not load: ${error}`} />
+          <Empty text={`Could not load: ${error}`} onRetry={() => setRetryKey(k => k + 1)} />
         ) : !tracks ? (
           <Spinner />
         ) : tracks.length === 0 ? (

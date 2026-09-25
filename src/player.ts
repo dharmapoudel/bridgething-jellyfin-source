@@ -88,6 +88,10 @@ export class PlaybackEngine {
   private gatewayUp: boolean | null = null;
   private healTimer: number | null = null;
   private lastReconnectAt = 0;
+  // Bumped on every genuine link transition (drop or reconnect). Views use
+  // it to retry loads that failed mid-outage once the link is back.
+  private linkGen = 0;
+  private linkListeners = new Set<() => void>();
 
   configure(jf: JellyfinClient | null): void {
     this.jf = jf;
@@ -111,6 +115,18 @@ export class PlaybackEngine {
   // force a ui refresh after mutating a queued track in place (e.g. favorite)
   touch(): void {
     this.emit();
+  }
+
+  get linkGeneration(): number {
+    return this.linkGen;
+  }
+
+  // Called on every genuine gateway transition (drop or reconnect).
+  onLink(fn: () => void): () => void {
+    this.linkListeners.add(fn);
+    return () => {
+      this.linkListeners.delete(fn);
+    };
   }
 
   current(): Track | null {
@@ -375,6 +391,9 @@ export class PlaybackEngine {
     const prev = this.gatewayUp;
     this.gatewayUp = connected;
     if (prev === null || prev === connected) return; // first sighting or no change
+    // genuine transition: let views retry anything that failed mid-outage
+    this.linkGen++;
+    for (const fn of this.linkListeners) fn();
     if (this.healTimer !== null) {
       window.clearTimeout(this.healTimer);
       this.healTimer = null;
