@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type TouchEvent as RTouchEvent } from 'react';
-import { Icon, IconBtn, ProgressBar, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
+import { Icon, ProgressBar, TransportGlyph, useArt, useCachedArt, usePlayer, usePortrait } from '../components';
 import type { LyricLineVM } from '../jellyfin';
 import { player } from '../player';
 import type { ViewProps } from '../nav';
@@ -185,55 +185,75 @@ function InfoPanel({
       </div>
 
       {/* the reference parks the seek bar + transport in the lower half of
-          the panel, with the action row pinned near the bottom */}
+          the panel, with the action row pinned near the bottom. The fixed
+          spacer drops the slim seek bar to where the top of the old green
+          play circle sat before the circle was removed. */}
       <div className="min-h-2 flex-[3]" />
+      <div className="h-[76px] shrink-0" />
 
       <div className="shrink-0">
         <ProgressBar onSeek={ms => void player.seekTo(ms)} />
       </div>
 
-      <div className="mt-2 flex shrink-0 items-center justify-center gap-6">
-        <IconBtn size={64} label="Previous" onClick={() => void player.prev()}>
-          <Icon name="prev" size={36} />
-        </IconBtn>
-        <IconBtn
-          size={88}
-          label={player.intentPlaying ? 'Pause' : 'Play'}
-          active
+      {/* o-music-style transport: plain icon buttons, no circles; the row
+          sits a circle-radius below where it was with the green circle */}
+      <div className="mt-3 flex shrink-0 items-center justify-center gap-8">
+        <button
+          type="button"
+          aria-label="Previous"
+          onClick={() => void player.prev()}
+          className="p-4 text-white/85 transition-transform duration-150 active:scale-90"
+        >
+          <TransportGlyph name="skip" className="h-9 w-9 -scale-x-100" />
+        </button>
+        <button
+          type="button"
+          aria-label={player.intentPlaying ? 'Pause' : 'Play'}
           onClick={() => void player.toggle()}
+          className="p-4 text-white/85 transition-transform duration-150 active:scale-90"
         >
           {player.loading ? (
-            <span className="h-9 w-9 animate-spin rounded-full border-4 border-black/20 border-t-black" />
+            <span className="block h-9 w-9 animate-spin rounded-full border-4 border-white/15 border-t-white/85" />
           ) : (
-            <Icon name={player.intentPlaying ? 'pause' : 'play'} size={44} />
+            <TransportGlyph name={player.intentPlaying ? 'pause' : 'play'} className="h-9 w-9" />
           )}
-        </IconBtn>
-        <IconBtn size={64} label="Next" onClick={() => void player.next()}>
-          <Icon name="next" size={36} />
-        </IconBtn>
+        </button>
+        <button
+          type="button"
+          aria-label="Next"
+          onClick={() => void player.next()}
+          className="p-4 text-white/85 transition-transform duration-150 active:scale-90"
+        >
+          <TransportGlyph name="skip" className="h-9 w-9" />
+        </button>
       </div>
 
       <div className="min-h-2 flex-[1]" />
 
+      {/* no circle backgrounds here either: the active state is a green icon */}
       <div className="flex shrink-0 items-center justify-center gap-8">
-        <IconBtn
-          size={56}
-          label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          active={isFavorite}
+        <button
+          type="button"
+          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           onClick={onToggleFav}
+          className={`p-4 transition-all duration-150 active:scale-90 ${
+            isFavorite ? 'text-leaf' : 'text-white/85'
+          }`}
         >
           <Icon name={isFavorite ? 'heartFill' : 'heart'} size={28} />
-        </IconBtn>
+        </button>
         {lyricsSupported !== false ? (
-          <IconBtn
-            size={56}
-            label={hasLyrics ? (lyricsTab ? 'Hide lyrics' : 'Show lyrics') : 'No lyrics for this track'}
-            active={lyricsTab}
+          <button
+            type="button"
+            aria-label={hasLyrics ? (lyricsTab ? 'Hide lyrics' : 'Show lyrics') : 'No lyrics for this track'}
             disabled={!hasLyrics}
             onClick={onToggleLyrics}
+            className={`p-4 transition-all duration-150 active:scale-90 disabled:opacity-30 ${
+              lyricsTab ? 'text-leaf' : 'text-white/85'
+            }`}
           >
             <Icon name="note" size={28} />
-          </IconBtn>
+          </button>
         ) : null}
       </div>
 

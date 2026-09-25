@@ -14,6 +14,12 @@ const RESUME_KEY = 'finch:resume';
 const DEVICE_ID_KEY = 'finch:device-id';
 const PROGRESS_REPORT_MS = 30_000;
 const PLAY_GRACE_MS = 1500;
+// Pause travels app -> daemon -> Bluetooth -> phone, so snapshots taken
+// before it lands still say "playing". While this window is open after a
+// user-initiated pause, stale snapshots must not resurrect intentPlaying
+// (which flips the UI back, keeps the lyrics moving, and can let a
+// transient "stopped" misfire next() and restart audio).
+const PAUSE_GRACE_MS = 2000;
 
 export interface PersistedQueue {
   tracks: Track[];
@@ -54,6 +60,7 @@ export class PlaybackEngine {
   private lastPlayAt = 0;
   private sessionId = '';
   private progressTimer: number | null = null;
+  private lastPauseAt = 0;
   // latest daemon snapshot, for resume reconciliation after an app restart
   private snapSeen = false;
   private snapTrackId: string | null = null;
@@ -175,6 +182,7 @@ export class PlaybackEngine {
     this.external = false;
     this.awaitingStart = true;
     this.lastPlayAt = Date.now();
+    this.lastPauseAt = 0;
     this.newSession();
     this.emit();
     try {
@@ -201,6 +209,7 @@ export class PlaybackEngine {
     try {
       if (this.intentPlaying) {
         this.intentPlaying = false;
+        this.lastPauseAt = Date.now();
         void this.jf?.reportProgress(t.id, this.sessionId, this.positionNow(), true);
         this.clearProgressTimer();
         this.emit();
@@ -208,6 +217,7 @@ export class PlaybackEngine {
       } else {
         this.awaitingStart = true;
         this.lastPlayAt = Date.now();
+        this.lastPauseAt = 0;
         this.emit();
         await client.player.resume();
       }
@@ -354,7 +364,15 @@ export class PlaybackEngine {
       this.external = false;
     }
     const pb = state.playback;
+    // True while a user-initiated pause is still travelling to the phone;
+    // snapshots from before it landed are stale.
+    const pauseGrace = Date.now() - this.lastPauseAt < PAUSE_GRACE_MS;
     if (pb.state === 'playing') {
+      // A stale "playing" snapshot must not resurrect intentPlaying right
+      // after the user paused: it flips the UI back to playing, keeps the
+      // lyrics/progress moving, and arms the "stopped" branch below to
+      // misfire next() and restart audio.
+      if (pauseGrace) return;
       this.intentPlaying = true;
       this.loading = false;
       this.awaitingStart = false;
@@ -376,6 +394,13 @@ export class PlaybackEngine {
       // after play() while the phone spins up.
       this.loading = false;
       if (this.awaitingStart && Date.now() - this.lastPlayAt < PLAY_GRACE_MS) return;
+      // Our own pause landing can surface as a transient "stopped" on the
+      // way to "paused" — never advance the queue for it.
+      if (pauseGrace) {
+        this.intentPlaying = false;
+        this.emit();
+        return;
+      }
       this.awaitingStart = false;
       if (this.intentPlaying) {
         this.intentPlaying = false;

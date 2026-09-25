@@ -1,3 +1,19 @@
+## 0.1.32
+
+- Now Playing transport uses the o-music player's control buttons
+  (ousachea/Ousa-Music-Player-v1): plain icon buttons with no circles —
+  the green circle around play/pause is gone.
+- Seek bar restyled to match: slim 3px rail, smaller 12px dot, compact
+  times. It sits lower, at the top of where the green circle was, and the
+  transport row moved down by the circle's radius.
+- Heart/lyrics row: no more green circle backgrounds — the icon itself
+  turns green when active.
+- Fixed pause resuming on its own: a user-initiated pause is now
+  authoritative for 2s, so stale "playing" snapshots arriving over the
+  slow Bluetooth link can no longer flip the UI back to playing (which
+  kept the lyrics moving) or let a transient "stopped" misfire the
+  next-track advance and restart audio.
+
 ## 0.1.31
 
 - Now Playing info panel matches the Spotify Car Thing reference alignment:

@@ -256,6 +256,37 @@ export function Icon({ name, size = 28, className = '' }: { name: keyof typeof P
   );
 }
 
+// Transport glyphs from the o-music player (ousachea/Ousa-Music-Player-v1):
+// the play triangle is optically centered, pause is two rounded bars, skip
+// is two solid triangles (mirrored at the usage site for previous). Used for
+// the Now Playing transport as plain buttons with no circle backgrounds.
+export function TransportGlyph({ name, className = '' }: { name: 'play' | 'pause' | 'skip'; className?: string }) {
+  if (name === 'play') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+        <path
+          transform="translate(-1.6 0)"
+          d="M8 5.2v13.6a1 1 0 0 0 1.53.85l10.7-6.8a1 1 0 0 0 0-1.7L9.53 4.35A1 1 0 0 0 8 5.2Z"
+        />
+      </svg>
+    );
+  }
+  if (name === 'pause') {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+        <rect x="5.5" y="3.5" width="4.6" height="17" rx="0.9" />
+        <rect x="13.9" y="3.5" width="4.6" height="17" rx="0.9" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+      <path d="M1.6 5.6v12.8a0.9 0.9 0 0 0 1.38.76l9.6-6.4a0.9 0.9 0 0 0 0-1.52l-9.6-6.4a0.9 0.9 0 0 0-1.38.76Z" />
+      <path d="M11.4 5.6v12.8a0.9 0.9 0 0 0 1.38.76l9.6-6.4a0.9 0.9 0 0 0 0-1.52l-9.6-6.4a0.9 0.9 0 0 0-1.38.76Z" />
+    </svg>
+  );
+}
+
 // ---- artwork ----
 
 export function Artwork({
@@ -536,7 +567,9 @@ export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
         aria-valuemin={0}
         aria-valuemax={Math.round(dur)}
         aria-valuenow={Math.round(player.positionNow())}
-        className="relative h-10 w-full cursor-pointer touch-none"
+        // slim o-music-style rail: 3px track, 12px dot. The -my-3/py-3 keeps
+        // a 48px touch target while the layout footprint stays 24px.
+        className="relative -my-3 flex h-6 w-full cursor-pointer touch-none items-center py-3"
         onPointerDown={e => {
           (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
           seekFromEvent(e.clientX);
@@ -545,15 +578,15 @@ export function ProgressBar({ onSeek }: { onSeek: (ms: number) => void }) {
           if (e.buttons) seekFromEvent(e.clientX);
         }}
       >
-        <div className="absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-white/15">
+        <div className="absolute top-1/2 h-[3px] w-full -translate-y-1/2 rounded-full bg-white/15">
           <div className="h-full rounded-full bg-gold" style={{ width: `${ratio * 100}%` }} />
         </div>
         <div
-          className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-goldlight shadow"
+          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-goldlight shadow"
           style={{ left: `${ratio * 100}%` }}
         />
       </div>
-      <div className="flex justify-between text-lg text-white/55">
+      <div className="flex justify-between text-sm text-white/55">
         <span>{fmtTime(player.positionNow())}</span>
         <span>-{fmtTime(Math.max(0, dur - player.positionNow()))}</span>
       </div>
