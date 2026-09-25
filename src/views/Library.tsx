@@ -94,7 +94,10 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
   const shuffleArtist = (a: Artist, shuffle: boolean): void => {
     jf.artistTracks(a.id)
       .then(ts => {
-        if (ts.length) return player.playQueue(ts, 0, shuffle);
+        if (ts.length) {
+          nav({ name: 'nowplaying' });
+          return player.playQueue(ts, 0, shuffle);
+        }
       })
       .catch(() => {});
   };

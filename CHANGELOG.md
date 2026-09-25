@@ -1,3 +1,10 @@
+## 0.1.29
+
+- Tapping a song (or Play/Shuffle/Instant Mix anywhere) now opens the Now
+  Playing screen, instead of just starting audio behind the current view.
+  "Play next" / "Add to queue" still just modify the queue without
+  navigating.
+
 ## 0.1.28
 
 - Queue bar is more visible (wider, slightly brighter) — the 0.1.27 bar was

@@ -27,7 +27,10 @@ export function trackActions(t: Track, jf: JellyfinClient, nav: NavFn): MenuActi
       run: () => {
         jf.instantMixFor(t.id)
           .then(mix => {
-            if (mix.length) return player.playQueue(mix, 0);
+            if (mix.length) {
+              nav({ name: 'nowplaying' });
+              return player.playQueue(mix, 0);
+            }
           })
           .catch(() => {});
       },
@@ -43,7 +46,10 @@ export function albumActions(a: Album, jf: JellyfinClient, nav: NavFn): MenuActi
     jf
       .albumTracks(a.id)
       .then(ts => {
-        if (ts.length) return player.playQueue(ts, 0, shuffle);
+        if (ts.length) {
+          nav({ name: 'nowplaying' });
+          return player.playQueue(ts, 0, shuffle);
+        }
       })
       .catch(() => {});
   return [
@@ -64,7 +70,10 @@ export function albumActions(a: Album, jf: JellyfinClient, nav: NavFn): MenuActi
       run: () => {
         jf.instantMixFor(a.id)
           .then(mix => {
-            if (mix.length) return player.playQueue(mix, 0);
+            if (mix.length) {
+              nav({ name: 'nowplaying' });
+              return player.playQueue(mix, 0);
+            }
           })
           .catch(() => {});
       },
@@ -85,7 +94,10 @@ export function playlistActions(p: Playlist, jf: JellyfinClient, nav: NavFn): Me
     jf
       .playlistItems(p.id)
       .then(ts => {
-        if (ts.length) return player.playQueue(ts, 0, shuffle);
+        if (ts.length) {
+          nav({ name: 'nowplaying' });
+          return player.playQueue(ts, 0, shuffle);
+        }
       })
       .catch(() => {});
   return [

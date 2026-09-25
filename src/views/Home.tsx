@@ -105,6 +105,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
                 subtitle={t.artist}
                 art={art?.trackArt(t) ?? null}
                 onClick={() => {
+                  nav({ name: 'nowplaying' });
                   void player.playQueue(recent.data!, recent.data!.indexOf(t));
                 }}
                 onMenu={() => openMenu(t.name, menuFor(t))}
@@ -139,6 +140,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
                 track={t}
                 art={art?.trackArt(t) ?? null}
                 onPlay={() => {
+                  nav({ name: 'nowplaying' });
                   void player.playQueue(favs.data!, favs.data!.indexOf(t));
                 }}
                 onMenu={() => openMenu(t.name, menuFor(t))}

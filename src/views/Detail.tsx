@@ -54,7 +54,10 @@ export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & 
   }, [params.id, params.kind]);
 
   const playAll = (shuffle: boolean): void => {
-    if (tracks?.length) void player.playQueue(tracks, 0, shuffle);
+    if (tracks?.length) {
+      nav({ name: 'nowplaying' });
+      void player.playQueue(tracks, 0, shuffle);
+    }
   };
 
   const headerArt = tracks?.[0] && params.kind !== 'album' ? (art?.trackArt(tracks[0], 300) ?? null) : null;
@@ -124,6 +127,7 @@ export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & 
                   showArt={params.kind !== 'album'}
                   indexLabel={params.kind === 'album' ? String(i + 1) : undefined}
                   onPlay={() => {
+                    nav({ name: 'nowplaying' });
                     void player.playQueue(tracks, i);
                   }}
                   onMenu={() => openMenu(t.name, trackActions(t, jf, nav))}
