@@ -252,6 +252,13 @@ export class PlaybackEngine {
         this.emit();
         await client.player.pause();
       } else {
+        // After a phone-side failure ("Playback failed") the phone's
+        // player is dead: resume() just fails again and loops the error.
+        // Restart the track instead so one tap recovers.
+        if (this.error) {
+          await this.playAt(this.index);
+          return;
+        }
         this.awaitingStart = true;
         this.lastPlayAt = Date.now();
         this.lastPauseAt = 0;
@@ -314,9 +321,21 @@ export class PlaybackEngine {
       this.pendingSeekMs = null;
       if (target === null || this.current()?.id !== trackId) return;
       this.lastSeekSentAt = Date.now();
-      getClient().player.seekTo({ positionMs: Math.round(target) }).catch(() => {
-        // best effort; the next snapshot corrects the UI
-      });
+      // The link can flap mid-send; swallow-and-forget used to lose the
+      // seek silently ("can't seek"). One retry 2s later, still guarded
+      // by the track check; beyond that the next snapshot corrects the UI.
+      let retried = false;
+      const send = (): void => {
+        if (this.current()?.id !== trackId) return;
+        getClient()
+          .player.seekTo({ positionMs: Math.round(target) })
+          .catch(() => {
+            if (retried) return;
+            retried = true;
+            window.setTimeout(send, 2000);
+          });
+      };
+      send();
     }, wait);
   }
 
@@ -470,8 +489,13 @@ export class PlaybackEngine {
       this.loading = false;
       this.awaitingStart = false;
       this.error = null;
-      this.positionMs = pb.positionMs;
-      this.positionAt = Date.now();
+      // A paced seek may not have reached the phone yet (up to 800ms):
+      // this snapshot's pre-seek position must not snap our clock back
+      // and make the seek look like it didn't take.
+      if (this.pendingSeekMs === null) {
+        this.positionMs = pb.positionMs;
+        this.positionAt = Date.now();
+      }
       const t = this.current();
       if (t && t.durationMs) this.durationMs = t.durationMs;
       // Late restart after a reconnect: the phone is near the track start
@@ -500,8 +524,11 @@ export class PlaybackEngine {
       }
       this.emit();
     } else if (pb.state === 'paused') {
-      this.positionMs = pb.positionMs;
-      this.positionAt = Date.now();
+      // same paced-seek guard as the playing branch above
+      if (this.pendingSeekMs === null) {
+        this.positionMs = pb.positionMs;
+        this.positionAt = Date.now();
+      }
       if (!this.awaitingStart) this.intentPlaying = false;
       this.loading = false;
       this.emit();

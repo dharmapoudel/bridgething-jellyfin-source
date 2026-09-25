@@ -1,3 +1,6 @@
+## 0.1.40
+- "Can't seek" fixes: (1) after "Playback failed", tapping play now restarts the track instead of calling resume() on the phone's dead player — resume just failed again and looped the error. One tap recovers. (2) a phone snapshot arriving during the 800ms paced-seek window no longer snaps our clock back to the pre-seek position (the phone hasn't received the seek yet); the bar now stays where the finger put it. (3) if the phone-bound seek send itself throws (link flapped mid-send), it retries once 2s later instead of silently dropping the seek.
+
 ## 0.1.39
 - Link-drop resilience for browsing: tapping a playlist (or anything else) while the phone link drops no longer parks the app on a raw "Transport Channel Closed" error. The message now reads "The phone link dropped while loading.", with a Try again button — and when the link comes back, failed loads retry automatically.
 - Album art recovers after a drop: artwork that failed mid-outage used to sit on the note-icon placeholder forever (including the Now Playing hero). It now refetches when the phone link returns; cache hits return instantly so only missing art re-hits the network.
