@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions, trackActions } from '../actions';
-import { cached } from '../cache';
+import { cached, stickyGet, stickySet } from '../cache';
 import { AuthError, Empty, Spinner, Tile, TrackRow, useArt, warmArt, type MenuAction } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Playlist, type Track } from '../jellyfin';
@@ -17,18 +17,23 @@ function useLoad<T>(key: string | null, load: () => Promise<T>): {
   useEffect(() => {
     if (!key) return;
     let dead = false;
-    setData(null);
     setError(null);
     setRawError(null);
+    // Seed from the sticky cache first: a cold start paints the last known
+    // rails instantly, then the network refresh replaces them silently.
+    const sticky = stickyGet<T>(key);
+    setData(sticky);
     cached(key, load).then(
       d => {
-        if (!dead) setData(d);
+        if (dead) return;
+        setData(d);
+        stickySet(key, d);
       },
       (e: unknown) => {
-        if (!dead) {
-          setError(e instanceof Error ? e.message : 'could not load');
-          setRawError(e);
-        }
+        if (dead) return;
+        if (sticky) return; // stale data beats an error banner
+        setError(e instanceof Error ? e.message : 'could not load');
+        setRawError(e);
       },
     );
     return () => {

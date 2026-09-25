@@ -1,3 +1,20 @@
+## 0.1.28
+
+- Queue bar is more visible (wider, slightly brighter) — the 0.1.27 bar was
+  nearly invisible at 15% white. Same behavior: shows on every screen while
+  a song is playing, tap/swipe up opens the queue sheet.
+- Cold-start caching: Home rails and Library lists are now kept in a
+  persistent (localStorage) sticky cache. A cold start paints the last known
+  library instantly, then revalidates in the background; tab switches were
+  already instant via the in-memory cache.
+- Artwork pipeline hardened: all daemon image fetches go through a
+  concurrency gate (max 4 in flight, FIFO). Prefetch is capped at 48 items,
+  scoped to the current Library tab, and cancelled on tab switch — the old
+  code fired one fetch per tile (hundreds at once) when the library loaded,
+  which was knocking the Bluetooth link over.
+- Landscape nav bar is icons-only now (Home/Library/Queue labels hidden);
+  portrait keeps the labels.
+
 ## 0.1.27
 
 - The mini now-playing bar is gone. Instead, the small transparent queue

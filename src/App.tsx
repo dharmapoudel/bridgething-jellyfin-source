@@ -309,7 +309,7 @@ export default function App() {
                   }`}
                 >
                   <Icon name={item.icon} size={30} />
-                  <span className="text-base leading-none">{item.label}</span>
+                  {portrait ? <span className="text-base leading-none">{item.label}</span> : null}
                 </button>
               );
             })}

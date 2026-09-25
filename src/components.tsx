@@ -41,35 +41,94 @@ async function loadArt(url: string): Promise<string | null> {
   }
   const inflight = artInflight.get(url);
   if (inflight) return inflight;
-  const p = (async (): Promise<string | null> => {
-    try {
-      const res = await getClient().net.fetch({
-        request: { url, method: 'GET', headers: [], body: null, timeoutMs: 15000, redirect: 'follow' },
-      });
-      if (!res.ok) return null;
-      const r = res.response.response as { status: number; body?: Uint8Array };
-      if (r.status >= 400 || !r.body?.length) return null;
-      const bytes = new Uint8Array(r.body); // copy: BlobPart needs Uint8Array<ArrayBuffer>
-      const obj = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
-      while (artObjects.size >= ART_CACHE_MAX) evictOldestArt();
-      artObjects.set(url, obj);
-      return obj;
-    } catch {
-      return null;
-    } finally {
-      artInflight.delete(url);
-    }
-  })();
+  // Gate every daemon fetch behind a small concurrency semaphore. Without it,
+  // opening the library fires one fetch per tile (hundreds at once) and the
+  // burst has been observed knocking the Bluetooth link over. Demand loads
+  // (gen -1) are never skipped; see warmArt for cancellable prefetch.
+  const p = new Promise<string | null>(resolve => {
+    artQueue.push({ url, gen: -1, resolve });
+    pumpArt();
+  });
   artInflight.set(url, p);
   return p;
 }
 
-// Pre-fetch a batch of artwork urls (e.g. a freshly loaded rail) so the
-// images are already cached when their tiles mount.
-export function warmArt(srcs: (string | null | undefined)[]): void {
-  for (const s of srcs) {
-    if (s && !artObjects.has(s) && !artInflight.has(s)) void loadArt(s);
+const ART_CONCURRENCY = 4;
+let artActive = 0;
+// gen: prefetch generation at enqueue time. Demand loads use gen -1 (never
+// stale); prefetches carry the warmArt generation and are skipped if a newer
+// batch cancelled them before their slot came up.
+const artQueue: { url: string; gen: number; resolve: (v: string | null) => void }[] = [];
+
+function pumpArt(): void {
+  while (artActive < ART_CONCURRENCY && artQueue.length) {
+    const next = artQueue.shift()!;
+    if (next.gen >= 0 && next.gen !== warmGen) {
+      // stale prefetch: abandoned before it ever hit the network.
+      artInflight.delete(next.url);
+      next.resolve(null);
+      continue;
+    }
+    artActive++;
+    void (async (): Promise<void> => {
+      let result: string | null = null;
+      try {
+        const res = await getClient().net.fetch({
+          request: { url: next.url, method: 'GET', headers: [], body: null, timeoutMs: 15000, redirect: 'follow' },
+        });
+        if (res.ok) {
+          const r = res.response.response as { status: number; body?: Uint8Array };
+          if (r.status < 400 && r.body?.length) {
+            const bytes = new Uint8Array(r.body); // copy: BlobPart needs Uint8Array<ArrayBuffer>
+            const obj = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+            while (artObjects.size >= ART_CACHE_MAX) evictOldestArt();
+            artObjects.set(next.url, obj);
+            result = obj;
+          }
+        }
+      } catch {
+        // failed art just leaves the tile placeholder
+      } finally {
+        artActive--;
+        artInflight.delete(next.url);
+        next.resolve(result);
+        pumpArt();
+      }
+    })();
   }
+}
+
+// Prefetch generation: bumped to abandon a prefetch batch (e.g. the user
+// switched tabs before it drained) so stale prefetches don't clog the queue.
+let warmGen = 0;
+
+// Pre-fetch a batch of artwork urls (e.g. a freshly loaded rail) so the
+// images are already cached when their tiles mount. Capped and funneled
+// through the same concurrency gate as on-demand loads; prefetch batches are
+// abandoned when cancelWarmArt() runs (their queued slots are skipped before
+// ever hitting the network).
+export function warmArt(srcs: (string | null | undefined)[], limit = 48): void {
+  const gen = warmGen;
+  let n = 0;
+  for (const s of srcs) {
+    if (n >= limit) break;
+    if (s && !artObjects.has(s) && !artInflight.has(s)) {
+      n++;
+      const p = new Promise<string | null>(resolve => {
+        artQueue.push({ url: s, gen, resolve });
+        pumpArt();
+      });
+      artInflight.set(s, p);
+      // Fire-and-forget: a Tile that mounts later picks the result up from
+      // artInflight/artObjects. A skipped-stale prefetch resolves null and a
+      // later demand load simply re-enqueues.
+      void p.catch(() => {});
+    }
+  }
+}
+
+export function cancelWarmArt(): void {
+  warmGen++;
 }
 
 export function useCachedArt(src: string | null): { url: string | null; failed: boolean } {

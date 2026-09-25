@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions } from '../actions';
-import { cached } from '../cache';
-import { AuthError, Empty, Spinner, Tile, useArt, warmArt } from '../components';
+import { cached, stickyGet, stickySet } from '../cache';
+import { AuthError, Empty, Spinner, Tile, useArt, warmArt, cancelWarmArt } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Artist, type Genre, type Playlist } from '../jellyfin';
 import type { LibTab, ViewProps } from '../nav';
@@ -25,20 +25,62 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
 
   useEffect(() => setTab(initialTab), [initialTab]);
 
+  // Seed each tab from the sticky cache so a cold start paints the last known
+  // library instantly; the per-tab refresh below keeps it honest.
+  useEffect(() => {
+    setAlbums(stickyGet<Album[]>('lib:albums'));
+    setArtists(stickyGet<Artist[]>('lib:artists'));
+    setPlaylists(stickyGet<Playlist[]>('lib:playlists'));
+    setGenres(stickyGet<Genre[]>('lib:genres'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let dead = false;
     setError(null);
     setRawError(null);
     const load = async (): Promise<void> => {
       try {
-        if (tab === 'albums' && !albums) setAlbums(await cached('lib:albums', () => jf.albums()));
-        if (tab === 'artists' && !artists) setArtists(await cached('lib:artists', () => jf.artists()));
-        if (tab === 'playlists' && !playlists) setPlaylists(await cached('lib:playlists', () => jf.playlists()));
-        if (tab === 'genres' && !genres) setGenres(await cached('lib:genres', () => jf.genres()));
+        if (tab === 'albums') {
+          const d = await cached('lib:albums', () => jf.albums());
+          if (!dead) {
+            setAlbums(d);
+            stickySet('lib:albums', d);
+          }
+        }
+        if (tab === 'artists') {
+          const d = await cached('lib:artists', () => jf.artists());
+          if (!dead) {
+            setArtists(d);
+            stickySet('lib:artists', d);
+          }
+        }
+        if (tab === 'playlists') {
+          const d = await cached('lib:playlists', () => jf.playlists());
+          if (!dead) {
+            setPlaylists(d);
+            stickySet('lib:playlists', d);
+          }
+        }
+        if (tab === 'genres') {
+          const d = await cached('lib:genres', () => jf.genres());
+          if (!dead) {
+            setGenres(d);
+            stickySet('lib:genres', d);
+          }
+        }
       } catch (e) {
         if (!dead) {
-          setError(e instanceof Error ? e.message : 'could not load');
-          setRawError(e);
+          // stale list beats an error banner when we have one
+          const hasData =
+            (tab === 'albums' && albums) ||
+            (tab === 'artists' && artists) ||
+            (tab === 'playlists' && playlists) ||
+            (tab === 'genres' && genres);
+          if (!hasData) {
+            setError(e instanceof Error ? e.message : 'could not load');
+            setRawError(e);
+          }
         }
       }
     };
@@ -57,14 +99,24 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
       .catch(() => {});
   };
 
-  // prefetch artwork for freshly loaded lists so tiles paint instantly
+  // prefetch artwork for the current tab only (capped, throttled, and
+  // cancellable): the old version fired one daemon fetch per album/artist/
+  // playlist at once, and the burst was knocking the Bluetooth link over.
   useEffect(() => {
-    warmArt([
-      ...(albums ?? []).map(a => art?.albumArt(a)),
-      ...(artists ?? []).map(a => art?.artistArt(a)),
-      ...(playlists ?? []).map(p => art?.playlistArt(p)),
-    ]);
-  }, [albums, artists, playlists, art]);
+    cancelWarmArt();
+    const srcs =
+      tab === 'albums'
+        ? (albums ?? []).map(a => art?.albumArt(a))
+        : tab === 'artists'
+          ? (artists ?? []).map(a => art?.artistArt(a))
+          : tab === 'playlists'
+            ? (playlists ?? []).map(p => art?.playlistArt(p))
+            : [];
+    if (srcs.length) warmArt(srcs);
+    return () => {
+      cancelWarmArt();
+    };
+  }, [tab, albums, artists, playlists, art]);
 
   return (
     <div className="flex h-full flex-col">
