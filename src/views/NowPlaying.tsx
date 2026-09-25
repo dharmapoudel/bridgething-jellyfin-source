@@ -133,131 +133,113 @@ function LyricsPanel({ lyrics }: { lyrics: LyricsState }) {
   return <SyncedLyrics lines={lyrics.lines} />;
 }
 
-// Full-screen backdrop: the current album art, heavily blurred and dimmed,
-// so the whole screen takes on the track's colors like the reference.
-function BlurredBackdrop({ url }: { url: string | null }) {
-  return (
-    <div className="absolute inset-0 overflow-hidden bg-[#14161c]">
-      {url ? (
-        <img
-          src={url}
-          alt=""
-          aria-hidden="true"
-          draggable={false}
-          className="absolute inset-0 h-full w-full scale-150 object-cover blur-3xl brightness-[0.4]"
-        />
-      ) : null}
-      <div className="absolute inset-0 bg-black/30" />
-    </div>
-  );
+// Device clock for the top of the info panel, like the reference.
+function Clock() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => force(n => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const s = new Date().toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  return <div className="text-lg text-white/60">{s}</div>;
 }
 
-function Transport() {
-  usePlayer();
-  return (
-    <div className="flex items-center justify-center gap-8">
-      <IconBtn size={72} label="Previous" onClick={() => void player.prev()}>
-        <Icon name="prev" size={40} />
-      </IconBtn>
-      <IconBtn
-        size={96}
-        label={player.intentPlaying ? 'Pause' : 'Play'}
-        active
-        onClick={() => void player.toggle()}
-      >
-        {player.loading ? (
-          <span className="h-10 w-10 animate-spin rounded-full border-4 border-black/20 border-t-black" />
-        ) : (
-          <Icon name={player.intentPlaying ? 'pause' : 'play'} size={48} />
-        )}
-      </IconBtn>
-      <IconBtn size={72} label="Next" onClick={() => void player.next()}>
-        <Icon name="next" size={40} />
-      </IconBtn>
-    </div>
-  );
-}
-
-// Top-right "Up next" preview card, like the reference. Tapping opens the
-// queue sheet.
-function UpNextCard({ onOpen }: { onOpen: () => void }) {
-  usePlayer();
-  const art = useArt();
-  const next = player.queue[player.index + 1];
-  if (!next) return <div className="h-[80px] shrink-0" />;
-  return (
-    <div className="flex h-[80px] shrink-0 items-start justify-end">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex max-w-full items-center gap-3 rounded-2xl bg-white/10 py-2 pl-2 pr-4 backdrop-blur-sm active:bg-white/20"
-      >
-        <Artwork src={art?.trackArt(next, 200) ?? null} size={60} rounded="rounded-xl" label={next.album} />
-        <span className="min-w-0 text-left">
-          <span className="block text-sm font-bold tracking-[0.2em] text-white/50 uppercase">Up next</span>
-          <span className="block max-w-64 truncate text-xl leading-tight font-semibold">{next.name}</span>
-          <span className="block max-w-64 truncate text-base leading-tight text-white/55">{next.artist}</span>
-        </span>
-      </button>
-    </div>
-  );
-}
-
-type RailProps = {
-  isFavorite: boolean;
-  onToggleFav: () => void;
-  lyricsTab: boolean;
-  onToggleLyrics: () => void;
-  lyricsSupported: boolean | null;
-  hasLyrics: boolean;
-  vertical: boolean;
-};
-
-// Love + lyrics actions. Vertical on the right edge in landscape (where the
-// reference puts its volume strip), horizontal under the transport in
-// portrait.
-function ActionRail({
+// Right-hand info column: clock, title/artist, progress with times,
+// transport, then heart + lyrics where the reference puts its volume bar —
+// the Spotify Car Thing arrangement.
+function InfoPanel({
   isFavorite,
   onToggleFav,
   lyricsTab,
   onToggleLyrics,
   lyricsSupported,
   hasLyrics,
-  vertical,
-}: RailProps) {
+}: {
+  isFavorite: boolean;
+  onToggleFav: () => void;
+  lyricsTab: boolean;
+  onToggleLyrics: () => void;
+  lyricsSupported: boolean | null;
+  hasLyrics: boolean;
+}) {
+  usePlayer();
+  const t = player.current();
+
+  if (!t) return null;
+
   return (
-    <div
-      className={
-        vertical
-          ? 'flex w-24 shrink-0 flex-col items-center justify-center gap-10'
-          : 'flex shrink-0 items-center justify-center gap-10'
-      }
-    >
-      <IconBtn
-        size={60}
-        label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-        active={isFavorite}
-        onClick={onToggleFav}
-      >
-        <Icon name={isFavorite ? 'heartFill' : 'heart'} size={30} />
-      </IconBtn>
-      {lyricsSupported !== false ? (
-        <IconBtn
-          size={60}
-          label={hasLyrics ? (lyricsTab ? 'Hide lyrics' : 'Show lyrics') : 'No lyrics for this track'}
-          active={lyricsTab}
-          disabled={!hasLyrics}
-          onClick={onToggleLyrics}
-        >
-          <Icon name="note" size={30} />
+    <div className="flex h-full min-h-0 flex-col bg-[#14161c] px-6 py-4">
+      <div className="flex shrink-0 items-center justify-center">
+        <Clock />
+      </div>
+
+      <div className="mt-1 min-w-0 shrink-0">
+        <div className="truncate text-3xl font-bold text-white">{t.name}</div>
+        <div className="mt-0.5 truncate text-2xl text-white/60">{t.artist}</div>
+      </div>
+
+      <div className="mt-3 shrink-0">
+        <ProgressBar onSeek={ms => void player.seekTo(ms)} />
+      </div>
+
+      <div className="mt-1 flex shrink-0 items-center justify-center gap-6">
+        <IconBtn size={64} label="Previous" onClick={() => void player.prev()}>
+          <Icon name="prev" size={36} />
         </IconBtn>
+        <IconBtn
+          size={88}
+          label={player.intentPlaying ? 'Pause' : 'Play'}
+          active
+          onClick={() => void player.toggle()}
+        >
+          {player.loading ? (
+            <span className="h-9 w-9 animate-spin rounded-full border-4 border-black/20 border-t-black" />
+          ) : (
+            <Icon name={player.intentPlaying ? 'pause' : 'play'} size={44} />
+          )}
+        </IconBtn>
+        <IconBtn size={64} label="Next" onClick={() => void player.next()}>
+          <Icon name="next" size={36} />
+        </IconBtn>
+      </div>
+
+      <div className="mt-auto flex shrink-0 items-center justify-center gap-8 pt-2">
+        <IconBtn
+          size={56}
+          label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          active={isFavorite}
+          onClick={onToggleFav}
+        >
+          <Icon name={isFavorite ? 'heartFill' : 'heart'} size={28} />
+        </IconBtn>
+        {lyricsSupported !== false ? (
+          <IconBtn
+            size={56}
+            label={hasLyrics ? (lyricsTab ? 'Hide lyrics' : 'Show lyrics') : 'No lyrics for this track'}
+            active={lyricsTab}
+            disabled={!hasLyrics}
+            onClick={onToggleLyrics}
+          >
+            <Icon name="note" size={28} />
+          </IconBtn>
+        ) : null}
+      </div>
+
+      {player.error ? (
+        <div className="shrink-0 pt-1 text-xl text-red-300">{player.error}</div>
+      ) : player.external ? (
+        <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
       ) : null}
     </div>
   );
 }
 
-// The almost-transparent bar at the middle bottom. Swipe up (or tap) opens
-// the queue sheet.
+// The small, almost-transparent bar at the bottom center. Swipe up (or tap)
+// opens the queue sheet.
 function QueueHandle({ onOpen }: { onOpen: () => void }) {
   const startY = useRef<number | null>(null);
   return (
@@ -275,14 +257,14 @@ function QueueHandle({ onOpen }: { onOpen: () => void }) {
       }}
       className="absolute bottom-1 left-1/2 z-20 -translate-x-1/2 p-3"
     >
-      <div className="h-1.5 w-36 rounded-full bg-white/25" />
+      <div className="h-1.5 w-12 rounded-full bg-white/15" />
     </button>
   );
 }
 
-// Queue as a bottom sheet over Now Playing. Swipe down on the grabber, tap
-// the backdrop, or hit X to close. Touches are contained so the root's
-// minimize gesture never fires from inside the sheet.
+// Queue as a bottom sheet over Now Playing. Swipe down on the grabber or tap
+// the backdrop to close — no close button. Touches are contained so the
+// root's minimize gesture never fires from inside the sheet.
 function QueueSheet({ onClose }: { onClose: () => void }) {
   usePlayer();
   const art = useArt();
@@ -313,20 +295,15 @@ function QueueSheet({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex shrink-0 items-center justify-between px-6 py-2">
           <h2 className="text-2xl font-bold">Up next{upcoming.length ? ` (${upcoming.length})` : ''}</h2>
-          <div className="flex items-center gap-3">
-            {upcoming.length ? (
-              <button
-                type="button"
-                onClick={() => player.clearQueue()}
-                className="h-12 rounded-full bg-white/10 px-5 text-lg text-red-300 active:bg-white/20"
-              >
-                Clear
-              </button>
-            ) : null}
-            <IconBtn size={52} label="Close queue" onClick={onClose}>
-              <Icon name="x" size={26} />
-            </IconBtn>
-          </div>
+          {upcoming.length ? (
+            <button
+              type="button"
+              onClick={() => player.clearQueue()}
+              className="h-12 rounded-full bg-white/10 px-5 text-lg text-red-300 active:bg-white/20"
+            >
+              Clear
+            </button>
+          ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
           {current ? (
@@ -397,8 +374,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
 
   // While this view is mounted the Now Playing screen is up: hold the Glass
   // Overlay's ambient screensaver off (see setAmbientInhibit above) until we
-  // unmount. This replaces the old synthetic-pointermove keepalive that only
-  // covered the lyrics tab.
+  // unmount.
   useEffect(() => {
     setAmbientInhibit(true);
     const onHide = (): void => setAmbientInhibit(false);
@@ -432,7 +408,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   };
 
   // Full-bleed artwork for the hero panel, served from the shared blob cache.
-  // A small copy doubles as the blurred full-screen backdrop (cheap to blur).
+  // A small copy doubles as the blurred lyrics backdrop (cheap to blur).
   const { url: heroArt } = useCachedArt(t ? (art?.trackArt(t, 800) ?? null) : null);
   const { url: bgArt } = useCachedArt(t ? (art?.trackArt(t, 200) ?? null) : null);
 
@@ -505,20 +481,17 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
     );
   }
 
-  const hasLyrics = lyrics.state === 'synced' || lyrics.state === 'plain';
-  const railProps = {
-    isFavorite: t.isFavorite,
-    onToggleFav: toggleFav,
-    lyricsTab,
-    onToggleLyrics: () => setLyricsTab(v => !v),
-    lyricsSupported,
-    hasLyrics,
-  };
-
-  // The lyrics toggle swaps the art card for the tick-by-tick lyrics,
-  // keeping the same panel and backdrop.
   const artPanel = lyricsTab ? (
-    <div className="relative h-full w-full overflow-hidden rounded-3xl bg-black/25">
+    <div className="relative h-full w-full overflow-hidden bg-[#14161c]">
+      {bgArt ? (
+        <img
+          src={bgArt}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="absolute inset-0 h-full w-full scale-125 object-cover blur-2xl brightness-[0.4]"
+        />
+      ) : null}
       <div className="relative h-full w-full">
         <LyricsPanel lyrics={lyrics} />
       </div>
@@ -528,20 +501,24 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
       src={heroArt}
       alt={t.album || t.name}
       draggable={false}
-      className="h-full w-full rounded-3xl object-cover shadow-2xl"
+      className="h-full w-full object-cover"
     />
   ) : (
-    <div className="flex h-full w-full items-center justify-center rounded-3xl bg-white/8">
+    <div className="flex h-full w-full items-center justify-center bg-zinc-900">
       <Icon name="note" size={96} className="text-white/15" />
     </div>
   );
 
-  const errorBlock =
-    player.error ? (
-      <div className="shrink-0 pt-2 text-xl text-red-300">{player.error}</div>
-    ) : player.external ? (
-      <div className="shrink-0 pt-2 text-xl text-white/50">Another app is playing on the phone.</div>
-    ) : null;
+  const infoPanel = (
+    <InfoPanel
+      isFavorite={t.isFavorite}
+      onToggleFav={toggleFav}
+      lyricsTab={lyricsTab}
+      onToggleLyrics={() => setLyricsTab(v => !v)}
+      lyricsSupported={lyricsSupported}
+      hasLyrics={lyrics.state === 'synced' || lyrics.state === 'plain'}
+    />
+  );
 
   const openQueue = (): void => setQueueOpen(true);
   const closeQueue = (): void => setQueueOpen(false);
@@ -549,26 +526,10 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   if (portrait) {
     return (
       <div className="relative flex h-full flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        <BlurredBackdrop url={bgArt} />
-        <div ref={artPanelRef} className="relative w-full shrink-0 p-5" style={{ height: '42%' }}>
+        <div ref={artPanelRef} className="w-full shrink-0 overflow-hidden" style={{ height: '48%' }}>
           {artPanel}
         </div>
-        <div className="relative flex min-h-0 flex-1 flex-col px-6 pb-10">
-          <div className="min-w-0 shrink-0">
-            <div className="truncate text-3xl font-bold text-white">{t.name}</div>
-            <div className="mt-0.5 truncate text-2xl text-white/60">{t.artist}</div>
-          </div>
-          <div className="mt-3 shrink-0">
-            <ProgressBar onSeek={ms => void player.seekTo(ms)} />
-          </div>
-          <div className="mt-3 shrink-0">
-            <Transport />
-          </div>
-          <div className="mt-4 shrink-0">
-            <ActionRail {...railProps} vertical={false} />
-          </div>
-          {errorBlock}
-        </div>
+        <div className="min-h-0 flex-1">{infoPanel}</div>
         <QueueHandle onOpen={openQueue} />
         {queueOpen ? <QueueSheet onClose={closeQueue} /> : null}
       </div>
@@ -577,29 +538,10 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
 
   return (
     <div className="relative flex h-full" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <BlurredBackdrop url={bgArt} />
-      <div ref={artPanelRef} className="relative h-full w-[44%] shrink-0 p-6">
+      <div ref={artPanelRef} className="h-full w-[55%] shrink-0 overflow-hidden">
         {artPanel}
       </div>
-      <div className="relative flex h-full min-w-0 flex-1 flex-col px-6 pt-4 pb-10">
-        <UpNextCard onOpen={openQueue} />
-        <div className="flex min-h-0 flex-1 flex-col justify-center">
-          <div className="min-w-0">
-            <div className="truncate text-4xl font-bold text-white">{t.name}</div>
-            <div className="mt-1 truncate text-2xl text-white/60">{t.artist}</div>
-          </div>
-          <div className="mt-5 shrink-0">
-            <ProgressBar onSeek={ms => void player.seekTo(ms)} />
-          </div>
-          <div className="mt-4 shrink-0">
-            <Transport />
-          </div>
-        </div>
-        {errorBlock}
-      </div>
-      <div className="relative flex shrink-0 items-center">
-        <ActionRail {...railProps} vertical />
-      </div>
+      <div className="h-full min-w-0 flex-1">{infoPanel}</div>
       <QueueHandle onOpen={openQueue} />
       {queueOpen ? <QueueSheet onClose={closeQueue} /> : null}
     </div>

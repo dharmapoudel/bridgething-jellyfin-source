@@ -1,3 +1,14 @@
+## 0.1.26
+
+- Now Playing reverts to the pre-0.1.25 layout (album art left, info panel
+  right) with the right-side controls in the Spotify Car Thing arrangement:
+  clock, title/artist, progress bar with elapsed/-remaining times, transport,
+  then heart + lyrics icons where the reference puts its volume bar (no
+  volume slider). The queue sheet stays: its bottom handle bar is 2/3
+  shorter and more transparent, and the sheet now closes by swiping down on
+  the grabber (or tapping the backdrop) — the X close button is gone. The
+  Glass Overlay ambient-inhibit signal from 0.1.25 is unchanged.
+
 ## 0.1.25
 
 - Now Playing redesign: blurred album-art backdrop; the volume bar is gone, replaced by a slim action rail with love (favorite) + lyrics buttons; album art sits left and the lyrics toggle swaps the art panel for tick-by-tick synced lyrics; a slim bottom-center bar (tap or swipe up) opens the queue sheet; the device Clock is removed from the info column and an "UP NEXT" card (tap to open the queue) sits top-right.
