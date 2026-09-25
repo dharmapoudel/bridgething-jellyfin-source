@@ -45,8 +45,11 @@ async function loadArt(url: string): Promise<string | null> {
   // opening the library fires one fetch per tile (hundreds at once) and the
   // burst has been observed knocking the Bluetooth link over. Demand loads
   // (gen -1) are never skipped; see warmArt for cancellable prefetch.
+  // Demand loads jump to the FRONT of the queue: something on screen now
+  // (the Now Playing hero, a freshly mounted tile) beats prefetching what
+  // might scroll into view later.
   const p = new Promise<string | null>(resolve => {
-    artQueue.push({ url, gen: -1, resolve });
+    artQueue.unshift({ url, gen: -1, resolve });
     pumpArt();
   });
   artInflight.set(url, p);

@@ -1,3 +1,12 @@
+## 0.1.34
+
+- Now Playing album art loads much faster: on-demand art now jumps to the
+  front of the fetch queue ahead of tile prefetches, the hero drops from
+  800px to 600px (the panel shows ~440px), and the already-fetched 200px art
+  renders instantly as a soft progressive placeholder until the hero
+  arrives. The accent tint is also extracted from the fast 200px art so the
+  panel wash shows up with the first paint.
+
 ## 0.1.33
 
 - Now Playing info panel rebuilt to match the o-music player exactly

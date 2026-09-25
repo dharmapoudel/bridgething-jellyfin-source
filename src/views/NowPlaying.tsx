@@ -358,12 +358,17 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
 
   // Full-bleed artwork for the hero panel, served from the shared blob cache.
   // A small copy doubles as the blurred lyrics backdrop (cheap to blur).
-  const { url: heroArt } = useCachedArt(t ? (art?.trackArt(t, 800) ?? null) : null);
+  // Hero at 600px: the panel shows ~440px, so 800 was pure extra Bluetooth
+  // bytes. The 200px art is already fetched for the backdrop/tint and renders
+  // instantly as a progressive placeholder until the hero arrives.
+  const { url: heroArt } = useCachedArt(t ? (art?.trackArt(t, 600) ?? null) : null);
   const { url: bgArt } = useCachedArt(t ? (art?.trackArt(t, 200) ?? null) : null);
 
   // Accent color pulled off the cover for the info panel wash + the
   // play/pause tint, o-music style.
-  const accent = useAccent(heroArt);
+  // Accent tint is extracted from the small art: it arrives over Bluetooth far
+  // sooner than the hero, so the wash shows up with the first paint.
+  const accent = useAccent(bgArt);
 
   // Lyrics need server >= 10.9; hide the toggle entirely on older servers.
   useEffect(() => {
@@ -449,13 +454,28 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
         <LyricsPanel lyrics={lyrics} />
       </div>
     </div>
-  ) : heroArt ? (
-    <img
-      src={heroArt}
-      alt={t.album || t.name}
-      draggable={false}
-      className="h-full w-full object-cover"
-    />
+  ) : heroArt || bgArt ? (
+    <div className="relative h-full w-full overflow-hidden">
+      {/* Progressive hero: the fast 200px art shows immediately (soft),
+          the 600px hero paints over it the moment it arrives. */}
+      {bgArt && !heroArt ? (
+        <img
+          src={bgArt}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="h-full w-full scale-105 object-cover blur-[3px]"
+        />
+      ) : null}
+      {heroArt ? (
+        <img
+          src={heroArt}
+          alt={t.album || t.name}
+          draggable={false}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : null}
+    </div>
   ) : (
     <div className="flex h-full w-full items-center justify-center bg-zinc-900">
       <Icon name="note" size={96} className="text-white/15" />
