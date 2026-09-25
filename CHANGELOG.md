@@ -1,3 +1,7 @@
+## 0.1.24
+
+- Removed the "Resume listening" banner from the Home screen.
+
 ## 0.1.23
 
 - New app icon: simplified singing-finch head (crest reduced to two subtle feathers) in gold line-art with a fully transparent background — no more navy square, so the hub tile no longer trims it into a squircle. 512x512 RGBA PNG at 34.7KB, under the daemon 64KB cap.

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions, trackActions } from '../actions';
 import { cached } from '../cache';
-import { AuthError, Empty, Icon, Spinner, Tile, TrackRow, useArt, warmArt, type MenuAction } from '../components';
-import { player, type PersistedQueue } from '../player';
+import { AuthError, Empty, Spinner, Tile, TrackRow, useArt, warmArt, type MenuAction } from '../components';
+import { player } from '../player';
 import { isAuthError, type Album, type Playlist, type Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
 
@@ -57,16 +57,11 @@ function Rail({ title, onSeeAll, children }: { title: string; onSeeAll?: () => v
 
 export default function Home({ jf, nav, openMenu }: ViewProps) {
   const art = useArt();
-  const [resume, setResume] = useState<PersistedQueue | null>(null);
 
   const recent = useLoad<Track[]>('home:recent', () => jf.recentlyPlayedTracks(12));
   const added = useLoad<Album[]>('home:added', () => jf.recentlyAddedAlbums(12));
   const favs = useLoad<Track[]>('home:favs', () => jf.favorites().then(f => f.slice(0, 12)));
   const playlists = useLoad<Playlist[]>('home:playlists', () => jf.playlists().then(p => p.slice(0, 12)));
-
-  useEffect(() => {
-    player.loadPersisted().then(setResume).catch(() => {});
-  }, []);
 
   // prefetch artwork for freshly loaded rails so tiles paint instantly
   useEffect(() => {
@@ -78,38 +73,10 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
     ]);
   }, [recent.data, added.data, favs.data, playlists.data, art]);
 
-  const startResume = (): void => {
-    if (!resume) return;
-    void player.playQueue(resume.tracks, resume.index).then(() => {
-      if (resume.positionMs > 5000) void player.seekTo(resume.positionMs);
-    });
-    setResume(null);
-  };
-
   const menuFor = (t: Track): MenuAction[] => trackActions(t, jf, nav);
 
   return (
     <div className="h-full overflow-y-auto py-4">
-        {resume && player.current() === null ? (
-          <section className="mb-6 px-4">
-            <button
-              type="button"
-              onClick={startResume}
-              className="flex w-full items-center gap-4 rounded-2xl bg-leaf/15 p-4 text-left active:bg-leaf/25"
-            >
-              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-leaf text-black">
-                <Icon name="play" size={34} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-xl font-semibold">Resume listening</span>
-                <span className="block truncate text-lg text-white/60">
-                  {resume.tracks[resume.index]?.name} · {resume.tracks.length} tracks
-                </span>
-              </span>
-            </button>
-          </section>
-        ) : null}
-
         {recent.error || added.error || favs.error || playlists.error ? (
           isAuthError(recent.rawError) ||
           isAuthError(added.rawError) ||
