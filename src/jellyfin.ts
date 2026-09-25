@@ -559,6 +559,10 @@ export class JellyfinClient {
 
   async lyricsSupported(): Promise<boolean> {
     const v = await this.serverVersion();
+    // A failed version check (link hiccup) must not hide the lyrics
+    // toggle: fail open. The per-track fetch still dims the toggle when a
+    // track actually has no lyrics.
+    if (v.major === 0 && v.minor === 0) return true;
     return v.major > 10 || (v.major === 10 && v.minor >= 9);
   }
 

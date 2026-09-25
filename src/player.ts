@@ -20,6 +20,14 @@ const PLAY_GRACE_MS = 1500;
 // (which flips the UI back, keeps the lyrics moving, and can let a
 // transient "stopped" misfire next() and restart audio).
 const PAUSE_GRACE_MS = 2000;
+// When the phone's Bluetooth link drops and comes back, the phone often
+// restarts the current track from the beginning while our clock kept
+// ticking (the seek bar "continues as normal" but the audio restarted).
+// On a genuine reconnect we push the phone back to where the music was.
+const RECONNECT_HEAL_MIN_MS = 15_000; // only heal when we're well into the track
+const RECONNECT_SETTLE_MS = 2500; // let the phone finish restarting first
+const RECONNECT_WATCH_MS = 10_000; // watch post-reconnect snapshots for a late restart
+const RESTART_GAP_MS = 10_000; // phone this far behind us => it restarted
 
 export interface PersistedQueue {
   tracks: Track[];
@@ -66,7 +74,12 @@ export class PlaybackEngine {
   private snapTrackId: string | null = null;
   private snapPlaying = false;
   private snapPositionMs = 0;
+  private lastSnapAt = 0;
   private adopting: string | null = null;
+  // gateway (phone Bluetooth) link state, fed by client.peer.onSnapshot
+  private gatewayUp: boolean | null = null;
+  private healTimer: number | null = null;
+  private lastReconnectAt = 0;
 
   configure(jf: JellyfinClient | null): void {
     this.jf = jf;
@@ -336,6 +349,37 @@ export class PlaybackEngine {
     return this.playAt(i);
   }
 
+  // Feed gateway (phone Bluetooth) connection transitions here. Finch is
+  // otherwise blind to link drops: snapshots keep arriving with the
+  // daemon's extrapolated position while the phone restarts the track.
+  handleGateway(connected: boolean): void {
+    const prev = this.gatewayUp;
+    this.gatewayUp = connected;
+    if (prev === null || prev === connected) return; // first sighting or no change
+    if (this.healTimer !== null) {
+      window.clearTimeout(this.healTimer);
+      this.healTimer = null;
+    }
+    if (!connected) return; // drop: nothing to heal until it comes back
+    this.lastReconnectAt = Date.now();
+    const t = this.current();
+    if (!this.intentPlaying || !t || this.external) return;
+    if (this.positionNow() < RECONNECT_HEAL_MIN_MS) return; // just started; nothing to restore
+    const trackId = t.id;
+    // Capture where the music was NOW: a post-reconnect snapshot may adopt
+    // the phone's restarted (~0) position before the timer fires, which
+    // would make positionNow() lie at heal time.
+    const target = this.positionNow();
+    this.healTimer = window.setTimeout(() => {
+      this.healTimer = null;
+      if (!this.intentPlaying || this.external) return;
+      const cur = this.current();
+      if (!cur || cur.id !== trackId) return;
+      if (this.lastSnapAt > this.lastReconnectAt && this.snapPositionMs >= RECONNECT_HEAL_MIN_MS) return;
+      void this.seekTo(target);
+    }, RECONNECT_SETTLE_MS);
+  }
+
   // Feed every daemon snapshot through here. Returns nothing; emits on change.
   handleSnapshot(state: {
     context: { uri: string } | null;
@@ -345,6 +389,7 @@ export class PlaybackEngine {
     // remember the raw snapshot for resume reconciliation (app restarted
     // while the phone kept playing one of our tracks)
     this.snapSeen = true;
+    this.lastSnapAt = Date.now();
     this.snapTrackId =
       ctxUri && ctxUri.startsWith(CONTEXT_PREFIX) ? ctxUri.slice(CONTEXT_PREFIX.length) : null;
     this.snapPlaying = state.playback.state === 'playing';
@@ -373,6 +418,7 @@ export class PlaybackEngine {
       // lyrics/progress moving, and arms the "stopped" branch below to
       // misfire next() and restart audio.
       if (pauseGrace) return;
+      const oursBefore = this.positionNow();
       this.intentPlaying = true;
       this.loading = false;
       this.awaitingStart = false;
@@ -381,6 +427,22 @@ export class PlaybackEngine {
       this.positionAt = Date.now();
       const t = this.current();
       if (t && t.durationMs) this.durationMs = t.durationMs;
+      // Late restart after a reconnect: the phone is near the track start
+      // while we are far ahead (a manual seek-to-0 would have reset our own
+      // clock too). Push it back to where the music was.
+      if (
+        Date.now() - this.lastReconnectAt < RECONNECT_WATCH_MS &&
+        pb.positionMs < RECONNECT_HEAL_MIN_MS &&
+        oursBefore - pb.positionMs > RESTART_GAP_MS
+      ) {
+        const trackId = this.current()?.id;
+        const target = oursBefore;
+        window.setTimeout(() => {
+          if (!this.intentPlaying || this.external) return;
+          if (this.current()?.id !== trackId) return;
+          void this.seekTo(target);
+        }, RECONNECT_SETTLE_MS);
+      }
       this.emit();
     } else if (pb.state === 'paused') {
       this.positionMs = pb.positionMs;

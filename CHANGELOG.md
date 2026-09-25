@@ -1,3 +1,18 @@
+## 0.1.35
+
+- Bluetooth drop recovery: when the phone's link drops and reconnects, the
+  phone often restarts the current track from the beginning while the seek
+  bar kept ticking. Finch now watches the gateway connection state
+  (client.peer.onSnapshot) and, on reconnect, pushes the phone back to
+  where the music was — with a snapshot guard that catches late restarts
+  too. The drops themselves are a radio/firmware matter; this heals the
+  aftermath. No heal fires when paused, when another app owns playback,
+  when the track just started, or when a post-reconnect snapshot already
+  shows the phone where it should be.
+- Lyrics toggle no longer vanishes when the server version check fails over
+  a flaky link (fail open; the per-track fetch still dims it when a track
+  genuinely has no lyrics).
+
 ## 0.1.34
 
 - Now Playing album art loads much faster: on-demand art now jumps to the

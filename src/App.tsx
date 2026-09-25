@@ -108,6 +108,13 @@ export default function App() {
     });
     const offErrReply = client.player.onErrorReply(reply => player.handlePlayerError(reply.error.type));
     const offErrEvent = client.player.onErrorEvent(reply => player.handlePlayerError(reply.error.type));
+    // Phone Bluetooth link state: on a drop->reconnect the phone often
+    // restarts the track from the beginning, so the player heals the
+    // position when the link comes back.
+    const offPeer = client.peer.onSnapshot(map => {
+      const connected = Object.values(map).some(p => p.companion.type === 'connected');
+      player.handleGateway(connected);
+    });
     const offVol = client.audio.onVolumeChanged(msg => {
       player.volume = msg.level;
       player.muted = msg.muted;
@@ -133,6 +140,7 @@ export default function App() {
     return () => {
       offLink();
       offSnap();
+      offPeer();
       offErrReply();
       offErrEvent();
       offVol();
