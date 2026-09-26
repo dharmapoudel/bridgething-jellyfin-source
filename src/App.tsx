@@ -425,8 +425,17 @@ export default function App() {
         return;
       }
       if (e.key === 'm' || e.key === 'M') {
-        // M is the device's home key: go to Finch home, never toggle playback.
-        if (v.name !== 'setup') nav({ name: 'home' });
+        // In Now Playing, M acts as back: dismiss the screen (like Escape)
+        // instead of leaving it — the app stays open on the previous view.
+        // preventDefault consumes the key so the device doesn't treat it as
+        // its home key and close the app.
+        if (v.name === 'nowplaying') {
+          e.preventDefault();
+          minimizeNowPlaying();
+        } else if (v.name !== 'setup') {
+          // M is the device's home key: go to Finch home, never toggle playback.
+          nav({ name: 'home' });
+        }
         return;
       }
       // preset shortcuts, ignored while typing in the on-screen keyboard views.
