@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { albumActions, playlistActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
 import { AuthError, Empty, Spinner, Tile, friendlyError, useArt, useLinkGen } from '../components';
@@ -12,6 +12,12 @@ import type { LibTab, ViewProps } from '../nav';
 // knocking the link over). Pages render progressively and the rest fill in
 // behind while the user browses.
 const LIB_PAGE = 120;
+
+// Keep-alive across unmounts: opening a playlist/album unmounts this view,
+// and coming back shouldn't jump to the top or refetch everything.
+const scrollTops = new Map<LibTab, number>();
+const lastFullLoad = new Map<LibTab, number>();
+const FRESH_MS = 5 * 60 * 1000;
 
 const TABS: { id: LibTab; label: string }[] = [
   { id: 'playlists', label: 'Playlists' },
@@ -32,6 +38,12 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
   const [retryKey, setRetryKey] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const linkGen = useLinkGen();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  // Which tab we've already restored the scroll position for in this mount;
+  // reset whenever the tab changes so each tab keeps its own position.
+  const restoredRef = useRef<LibTab | null>(null);
 
   useEffect(() => setTab(initialTab), [initialTab]);
 
@@ -57,14 +69,24 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
     setError(null);
     setRawError(null);
     setLoadingMore(false);
+    // Back-nav keep-alive: if this tab fully loaded recently and the sticky
+    // cache still has it, don't refetch — the list paints from sticky and
+    // the scroll position (below) is preserved. Manual/link retries bypass.
+    const stickyKey = `lib:${tab}`;
+    const seeded = !!stickyGet<unknown[]>(stickyKey)?.length;
+    if (retryKey === 0 && seeded && Date.now() - (lastFullLoad.get(tab) ?? 0) < FRESH_MS) {
+      return () => {
+        dead = true;
+      };
+    }
     // Page through a large list in bounded frames, rendering progressively.
     // Tab switches and retries abandon the loop via `dead`.
     const loadPaged = async <T,>(
-      stickyKey: string,
-      hasData: boolean,
+      key: string,
       fetchPage: (start: number, limit: number) => Promise<T[]>,
       setData: (d: T[]) => void,
     ): Promise<void> => {
+      const hasData = !!stickyGet<unknown[]>(key)?.length;
       const all: T[] = [];
       let start = 0;
       for (;;) {
@@ -89,17 +111,18 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
       }
       if (!dead) {
         setLoadingMore(false);
-        stickySet(stickyKey, all);
+        stickySet(key, all);
+        lastFullLoad.set(tab, Date.now());
       }
     };
     const load = async (): Promise<void> => {
       try {
         if (tab === 'albums') {
-          await loadPaged('lib:albums', !!albums, (s, l) => jf.albums(s, l), setAlbums);
+          await loadPaged('lib:albums', (s, l) => jf.albums(s, l), setAlbums);
           return;
         }
         if (tab === 'artists') {
-          await loadPaged('lib:artists', !!artists, (s, l) => jf.artists(s, l), setArtists);
+          await loadPaged('lib:artists', (s, l) => jf.artists(s, l), setArtists);
           return;
         }
         if (tab === 'playlists') {
@@ -107,6 +130,7 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
           if (!dead) {
             setPlaylists(d);
             stickySet('lib:playlists', d);
+            lastFullLoad.set(tab, Date.now());
           }
         }
         if (tab === 'genres') {
@@ -114,20 +138,14 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
           if (!dead) {
             setGenres(d);
             stickySet('lib:genres', d);
+            lastFullLoad.set(tab, Date.now());
           }
         }
       } catch (e) {
-        if (!dead) {
+        if (!dead && !seeded) {
           // stale list beats an error banner when we have one
-          const hasData =
-            (tab === 'albums' && albums) ||
-            (tab === 'artists' && artists) ||
-            (tab === 'playlists' && playlists) ||
-            (tab === 'genres' && genres);
-          if (!hasData) {
-            setError(friendlyError(e));
-            setRawError(e);
-          }
+          setError(friendlyError(e));
+          setRawError(e);
         }
       }
     };
@@ -137,6 +155,34 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, retryKey]);
+
+  // Restore this tab's scroll position once its list has painted (sticky
+  // seed or fresh load). Runs every render but restores only once per tab;
+  // progressive page appends must not yank the scroll back.
+  useEffect(() => {
+    if (restoredRef.current === tab) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const dataPresent =
+      (tab === 'albums' && albums) ||
+      (tab === 'artists' && artists) ||
+      (tab === 'playlists' && playlists) ||
+      (tab === 'genres' && genres);
+    if (!dataPresent) return;
+    restoredRef.current = tab;
+    const y = scrollTops.get(tab) ?? 0;
+    if (y > 0) el.scrollTop = y;
+  });
+
+  // Backstop: persist the scroll position when this view unmounts (opening
+  // a playlist/album). The onScroll handler below keeps it current; this
+  // covers unmounts with no preceding scroll event.
+  useEffect(() => {
+    return () => {
+      const el = scrollRef.current;
+      if (el) scrollTops.set(tabRef.current, el.scrollTop);
+    };
+  }, []);
 
   const shuffleArtist = (a: Artist, shuffle: boolean): void => {
     jf.artistTracks(a.id)
@@ -171,7 +217,11 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
           </button>
         ))}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto p-4"
+        onScroll={e => scrollTops.set(tabRef.current, e.currentTarget.scrollTop)}
+      >
         {error ? (
           isAuthError(rawError) ? (
             <AuthError
