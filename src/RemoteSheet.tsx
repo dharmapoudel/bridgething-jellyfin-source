@@ -89,14 +89,21 @@ export function RemoteSheet({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             sessions.map(s => (
-              <button key={s.id} type="button" onClick={() => choose(s)} className={row}>
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => choose(s)}
+                className={row + (s.offline ? ' opacity-45' : '')}
+              >
                 <Icon name="note" size={30} className="shrink-0 text-white/60" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xl font-semibold">
                     {s.client} <span className="font-normal text-white/45">· {s.deviceName}</span>
                   </div>
                   <div className="truncate text-lg text-white/45">
-                    {s.nowPlayingName ?? (s.isPlaying ? 'Playing' : 'Idle')}
+                    {s.offline
+                      ? 'Offline — open the app on your phone, then pick it here'
+                      : (s.nowPlayingName ?? (s.isPlaying ? 'Playing' : 'Idle'))}
                   </div>
                 </div>
                 {player.remoteActive && player.remoteSessionId === s.id ? (

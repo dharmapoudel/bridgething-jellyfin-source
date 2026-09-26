@@ -437,6 +437,20 @@ export class PlaybackEngine {
 
   async next(auto = false): Promise<void> {
     if (this.remoteActive) {
+      // Optimistic advance of the mirror; the catch-up poll corrects us if
+      // the command didn't land (pollRemote re-syncs the index by track id).
+      if (this.queue.length > 1) {
+        this.index = (this.index + 1) % this.queue.length;
+        const t = this.current();
+        if (t) {
+          this.durationMs = t.durationMs;
+          this.positionMs = 0;
+          this.positionAt = Date.now();
+          this.intentPlaying = true;
+          this.error = null;
+          this.emit();
+        }
+      }
       this.remoteCommand('NextTrack');
       return;
     }
@@ -468,6 +482,20 @@ export class PlaybackEngine {
         this.emit();
         this.remoteCommand('Seek', 0);
       } else {
+        // Optimistic step back of the mirror; the catch-up poll corrects us
+        // if the command didn't land.
+        if (this.queue.length > 1 && this.index > 0) {
+          this.index -= 1;
+          const t = this.current();
+          if (t) {
+            this.durationMs = t.durationMs;
+            this.positionMs = 0;
+            this.positionAt = Date.now();
+            this.intentPlaying = true;
+            this.error = null;
+            this.emit();
+          }
+        }
         this.remoteCommand('PreviousTrack');
       }
       return;
@@ -645,7 +673,32 @@ export class PlaybackEngine {
 
   async discoverRemote(): Promise<RemoteSessionInfo[]> {
     if (!this.jf) return [];
-    return new RemoteControl(this.jf).discover();
+    const sessions = await new RemoteControl(this.jf).discover();
+    // If the last-used session isn't advertised anymore (client suspended or
+    // closed), show it greyed out as offline so it reads as "away", not lost.
+    const saved = await this.loadPersistedRemote();
+    if (saved?.sessionId && !sessions.some(s => s.id === saved.sessionId)) {
+      sessions.push({
+        id: saved.sessionId,
+        client: saved.client || 'Player',
+        deviceName: saved.deviceName || 'Phone',
+        nowPlayingName: null,
+        isPlaying: false,
+        lastActive: null,
+        offline: true,
+      });
+    }
+    return sessions;
+  }
+
+  private async loadPersistedRemote(): Promise<{ sessionId?: string; client?: string; deviceName?: string } | null> {
+    try {
+      const r = await getClient().store.get({ key: REMOTE_KEY });
+      if (r.ok && r.response.value) return JSON.parse(r.response.value);
+    } catch {
+      // no saved session
+    }
+    return null;
   }
 
   // Engage remote mode: stop any local companion playback (two audio
@@ -720,7 +773,7 @@ export class PlaybackEngine {
   private pollRemoteSoon(): void {
     window.setTimeout(() => {
       if (this.remoteActive) void this.pollRemote();
-    }, 900);
+    }, 300);
   }
 
   private async pollRemote(): Promise<void> {
@@ -775,13 +828,7 @@ export class PlaybackEngine {
   // song was playing last").
   async reconcileRemote(): Promise<void> {
     if (!this.jf || this.remoteActive) return;
-    let saved: { sessionId?: string; client?: string; deviceName?: string } | null = null;
-    try {
-      const r = await getClient().store.get({ key: REMOTE_KEY });
-      if (r.ok && r.response.value) saved = JSON.parse(r.response.value);
-    } catch {
-      return;
-    }
+    const saved = await this.loadPersistedRemote();
     const remote = new RemoteControl(this.jf);
     if (saved?.sessionId) {
       try {

@@ -16,6 +16,9 @@ export interface RemoteSessionInfo {
   nowPlayingName: string | null;
   isPlaying: boolean;
   lastActive: string | null;
+  /** Not currently advertised by the server — the last-used session, shown
+   *  greyed out so a suspended client reads as "offline" rather than lost. */
+  offline?: boolean;
 }
 
 export type RemoteCommand = 'Pause' | 'Unpause' | 'NextTrack' | 'PreviousTrack' | 'Seek' | 'Stop';
