@@ -54,7 +54,7 @@ function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
             </div>
             {/* the line */}
             <div
-              className={`h-[3px] rounded-full transition-all duration-300 ${
+              className={`h-[2px] rounded-full transition-all duration-300 ${
                 active ? 'mt-1.5 w-12 bg-leaf' : 'mt-0 w-8 bg-white/20'
               }`}
             />
