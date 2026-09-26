@@ -6,7 +6,7 @@
 
 import { getClient } from './client';
 import { JellyfinClient, type Track } from './jellyfin';
-import { FinampRemote, type RemoteSessionInfo } from './remote';
+import { RemoteControl, type RemoteSessionInfo } from './remote';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -44,7 +44,7 @@ const END_WATCH_MS = 5000;
 // How close to the end (by our clock) before we start polling the phone
 // directly instead of waiting for its end-of-track snapshot.
 const END_POLL_WINDOW_MS = 10_000;
-// Finamp remote mode: server session polls. Position only needs to be
+// Remote mode: server session polls. Position only needs to be
 // fresh enough for the progress bar; commands are instant.
 const REMOTE_POLL_MS = 3000;
 // After we send a remote command our optimistic local state wins over poll
@@ -125,11 +125,12 @@ export class PlaybackEngine {
   // it to retry loads that failed mid-outage once the link is back.
   private linkGen = 0;
   private linkListeners = new Set<() => void>();
-  // Finamp remote mode: Finch becomes a remote control for a Finamp
-  // session on the server. The remote track is mirrored into
-  // queue/index/intentPlaying/position so every view works unchanged;
+  // Remote mode: Finch becomes a remote control for another
+  // Jellyfin client's session on the server. The remote track is mirrored
+  // into queue/index/intentPlaying/position so every view works unchanged;
   // transport methods route to the server instead of the companion.
   remoteSessionId: string | null = null;
+  remoteClient = '';
   remoteDevice = '';
   private remotePollTimer: number | null = null;
   private remoteGen = 0;
@@ -300,9 +301,9 @@ export class PlaybackEngine {
   async playQueue(tracks: Track[], startIndex = 0, shuffle = this.shuffle): Promise<void> {
     if (!tracks.length || !this.jf) return;
     if (this.remoteActive) {
-      // Hand the whole queue to Finamp: it builds its own player-side
+      // Hand the whole queue to the client: it builds its own player-side
       // queue from the item ids. Mirror it locally so the Queue view shows
-      // what Finamp plays; polls keep the current index in sync by track id.
+      // what the client plays; polls keep the current index in sync by track id.
       let list = [...tracks];
       let idx = Math.max(0, Math.min(startIndex, list.length - 1));
       if (shuffle && list.length > 1) {
@@ -317,11 +318,11 @@ export class PlaybackEngine {
       this.errorDetail = null;
       this.emit();
       try {
-        await new FinampRemote(this.jf).playNow(this.remoteSessionId!, list.map(t => t.id), idx);
+        await new RemoteControl(this.jf).playNow(this.remoteSessionId!, list.map(t => t.id), idx);
         this.lastRemoteCmdAt = Date.now();
       } catch {
         this.loading = false;
-        this.error = 'Could not reach Finamp.';
+        this.error = 'Could not reach the player.';
       }
       this.emit();
       this.pollRemoteSoon();
@@ -489,7 +490,7 @@ export class PlaybackEngine {
     this.positionAt = Date.now();
     this.emit();
     if (this.remoteActive) {
-      // No Bluetooth pacing needed: one server command, Finamp seeks.
+      // No Bluetooth pacing needed: one server command seeks the client.
       this.remoteCommand('Seek', clamped);
       return;
     }
@@ -525,7 +526,7 @@ export class PlaybackEngine {
   }
 
   setShuffle(on: boolean): void {
-    // Remote mode: Finamp owns shuffle/repeat for its own queue.
+    // Remote mode: the client owns shuffle/repeat for its own queue.
     if (this.remoteActive) return;
     this.shuffle = on;
     this.emit();
@@ -533,7 +534,7 @@ export class PlaybackEngine {
   }
 
   cycleRepeat(): void {
-    // Remote mode: Finamp owns shuffle/repeat for its own queue.
+    // Remote mode: the client owns shuffle/repeat for its own queue.
     if (this.remoteActive) return;
     this.repeat = this.repeat === 'off' ? 'all' : this.repeat === 'all' ? 'one' : 'off';
     this.emit();
@@ -548,7 +549,7 @@ export class PlaybackEngine {
 
   playNext(track: Track): void {
     if (this.remoteActive) {
-      // Finamp owns its queue: only starting fresh playback makes sense.
+      // The client owns its queue: only starting fresh playback makes sense.
       if (!this.current()) void this.playQueue([track], 0);
       return;
     }
@@ -562,7 +563,7 @@ export class PlaybackEngine {
 
   addToQueue(track: Track): void {
     if (this.remoteActive) {
-      // Finamp owns its queue: only starting fresh playback makes sense.
+      // The client owns its queue: only starting fresh playback makes sense.
       if (!this.current()) void this.playQueue([track], 0);
       return;
     }
@@ -575,7 +576,7 @@ export class PlaybackEngine {
   }
 
   removeAt(i: number): void {
-    // Remote mode: the queue lives in Finamp; mutating our mirror would desync.
+    // Remote mode: the queue lives in the client; mutating our mirror would desync.
     if (this.remoteActive) return;
     if (i < 0 || i >= this.queue.length) return;
     this.queue.splice(i, 1);
@@ -598,7 +599,7 @@ export class PlaybackEngine {
   }
 
   clearQueue(): void {
-    // Remote mode: the queue lives in Finamp; mutating our mirror would desync.
+    // Remote mode: the queue lives in the client; mutating our mirror would desync.
     if (this.remoteActive) return;
     this.queue = [];
     this.index = -1;
@@ -610,7 +611,7 @@ export class PlaybackEngine {
 
   async jumpTo(i: number): Promise<void> {
     if (this.remoteActive) {
-      // Finamp has no index-skip command: restart its queue at i.
+      // The client has no index-skip command: restart its queue at i.
       if (i < 0 || i >= this.queue.length || !this.jf || !this.remoteSessionId) return;
       this.index = i;
       this.positionMs = 0;
@@ -619,7 +620,7 @@ export class PlaybackEngine {
       this.error = null;
       this.emit();
       try {
-        await new FinampRemote(this.jf).playNow(
+        await new RemoteControl(this.jf).playNow(
           this.remoteSessionId,
           this.queue.map(t => t.id),
           i,
@@ -627,7 +628,7 @@ export class PlaybackEngine {
         this.lastRemoteCmdAt = Date.now();
       } catch {
         this.loading = false;
-        this.error = 'Could not reach Finamp.';
+        this.error = 'Could not reach the player.';
       }
       this.emit();
       this.pollRemoteSoon();
@@ -636,7 +637,7 @@ export class PlaybackEngine {
     return this.playAt(i);
   }
 
-  // ---- Finamp remote mode ----
+  // ---- Remote mode ----
 
   get remoteActive(): boolean {
     return this.remoteSessionId !== null;
@@ -644,12 +645,12 @@ export class PlaybackEngine {
 
   async discoverRemote(): Promise<RemoteSessionInfo[]> {
     if (!this.jf) return [];
-    return new FinampRemote(this.jf).discover();
+    return new RemoteControl(this.jf).discover();
   }
 
   // Engage remote mode: stop any local companion playback (two audio
-  // sources on the phone would fight), then mirror the Finamp session.
-  async enableRemote(sessionId: string, deviceName: string): Promise<void> {
+  // sources on the phone would fight), then mirror the remote session.
+  async enableRemote(sessionId: string, client: string, deviceName: string): Promise<void> {
     if (!this.jf) return;
     const gen = ++this.remoteGen;
     this.clearProgressTimer();
@@ -675,6 +676,7 @@ export class PlaybackEngine {
     }
     if (gen !== this.remoteGen) return;
     this.remoteSessionId = sessionId;
+    this.remoteClient = client;
     this.remoteDevice = deviceName;
     await this.pollRemote();
     if (gen !== this.remoteGen) return;
@@ -685,7 +687,7 @@ export class PlaybackEngine {
     try {
       await getClient().store.put({
         key: REMOTE_KEY,
-        value: JSON.stringify({ sessionId, deviceName }),
+        value: JSON.stringify({ sessionId, client, deviceName }),
       });
     } catch {
       // non-fatal
@@ -699,6 +701,7 @@ export class PlaybackEngine {
       this.remotePollTimer = null;
     }
     this.remoteSessionId = null;
+    this.remoteClient = '';
     this.remoteDevice = '';
     this.queue = [];
     this.index = -1;
@@ -726,21 +729,22 @@ export class PlaybackEngine {
     if (!this.jf || !sid) return;
     let st;
     try {
-      st = await new FinampRemote(this.jf).state(sid);
+      st = await new RemoteControl(this.jf).state(sid);
     } catch {
       return; // transient network blip: keep last state, try again next poll
     }
     if (gen !== this.remoteGen) return;
     if (!st) {
-      // Finamp closed or went offline: fall back to local mode.
-      this.error = 'Lost the Finamp session.';
+      // Client closed or went offline: fall back to local mode.
+      this.error = 'Lost the remote session.';
       this.disableRemote();
       return;
     }
+    this.remoteClient = st.client || this.remoteClient;
     this.remoteDevice = st.deviceName || this.remoteDevice;
     const cur = this.current();
     if (st.track && (!cur || cur.id !== st.track.id)) {
-      // Track changed (Finamp advanced, or user skipped on the phone).
+      // Track changed (the client advanced, or the user skipped on the phone).
       // Keep the mirrored queue when the new track is in it; otherwise the
       // session's queue changed out from under us — mirror the track alone.
       const qi = this.queue.findIndex(t => t.id === st.track!.id);
@@ -766,22 +770,36 @@ export class PlaybackEngine {
     this.emit();
   }
 
-  // Re-attach to the persisted remote session after an app restart.
+  // Re-attach after an app restart: the persisted session first, else the
+  // most recently active session that has something playing ("where the
+  // song was playing last").
   async reconcileRemote(): Promise<void> {
     if (!this.jf || this.remoteActive) return;
-    let saved: { sessionId?: string; deviceName?: string } | null = null;
+    let saved: { sessionId?: string; client?: string; deviceName?: string } | null = null;
     try {
       const r = await getClient().store.get({ key: REMOTE_KEY });
       if (r.ok && r.response.value) saved = JSON.parse(r.response.value);
     } catch {
       return;
     }
-    if (!saved?.sessionId) return;
+    const remote = new RemoteControl(this.jf);
+    if (saved?.sessionId) {
+      try {
+        const st = await remote.state(saved.sessionId);
+        if (st) {
+          await this.enableRemote(saved.sessionId, saved.client || st.client, saved.deviceName || st.deviceName);
+          return;
+        }
+      } catch {
+        // persisted client not around; fall through to discovery
+      }
+    }
     try {
-      const st = await new FinampRemote(this.jf).state(saved.sessionId);
-      if (st) await this.enableRemote(saved.sessionId, saved.deviceName || st.deviceName);
+      const sessions = await remote.discover();
+      const last = sessions.find(s => s.nowPlayingName);
+      if (last) await this.enableRemote(last.id, last.client, last.deviceName);
     } catch {
-      // Finamp not around; stay in local mode
+      // nothing to adopt; stay in local mode
     }
   }
 
@@ -789,10 +807,10 @@ export class PlaybackEngine {
     const sid = this.remoteSessionId;
     if (!sid || !this.jf) return;
     this.lastRemoteCmdAt = Date.now();
-    new FinampRemote(this.jf)
+    new RemoteControl(this.jf)
       .command(sid, cmd, seekMs)
       .catch(() => {
-        this.error = 'Could not reach Finamp.';
+        this.error = 'Could not reach the player.';
         this.emit();
       });
     this.pollRemoteSoon();
@@ -1116,7 +1134,7 @@ export class PlaybackEngine {
 
   private async persist(): Promise<void> {
     // Remote mode has its own persistence (finch:remote-session); the
-    // mirrored queue is Finamp's, not ours to resume locally.
+    // mirrored queue is the client's, not ours to resume locally.
     if (this.remoteActive) return;
     const t = this.current();
     if (!t) return;

@@ -89,7 +89,7 @@ export default function App() {
     await player.loadPrefs();
     setJf(client);
     setCredsState('ready');
-    // Re-attach to the persisted Finamp remote session, if any.
+    // Re-attach to the remote session, if any.
     void player.reconcileRemote();
     // If something is already playing from the server (app was restarted
     // while the phone kept playing, or a session is active), adopt it so the

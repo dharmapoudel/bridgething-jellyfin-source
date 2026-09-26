@@ -3,9 +3,10 @@ import { Icon, usePlayer } from './components';
 import { player } from './player';
 import type { RemoteSessionInfo } from './remote';
 
-// "Play on" picker: this device (the companion app, the default path) or a
-// Finamp session on the phone, which Finch then remote-controls through the
-// Jellyfin server while Finamp's own player does the audio.
+// "Play on" picker: this device (the companion app, the default path) or
+// another Jellyfin client's session on the server — Finamp, Jellyfin Web,
+// Swiftfin, whatever played last — which Finch then remote-controls while
+// the client's own player does the audio.
 export function RemoteSheet({ onClose }: { onClose: () => void }) {
   usePlayer();
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -35,7 +36,7 @@ export function RemoteSheet({ onClose }: { onClose: () => void }) {
   const choose = (s: RemoteSessionInfo): void => {
     if (busy) return;
     setBusy(true);
-    void player.enableRemote(s.id, s.deviceName).then(
+    void player.enableRemote(s.id, s.client, s.deviceName).then(
       () => onClose(),
       () => setBusy(false),
     );
@@ -83,7 +84,7 @@ export function RemoteSheet({ onClose }: { onClose: () => void }) {
             </div>
           ) : sessions.length === 0 ? (
             <div className="px-4 py-6 text-center text-xl leading-snug text-white/50">
-              No Finamp sessions found. Open Finamp on your phone (signed into the same Jellyfin
+              Nothing else is playing. Open a Jellyfin player on your phone (signed into the same
               user) and try again.
             </div>
           ) : (
@@ -92,7 +93,7 @@ export function RemoteSheet({ onClose }: { onClose: () => void }) {
                 <Icon name="note" size={30} className="shrink-0 text-white/60" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xl font-semibold">
-                    Finamp <span className="font-normal text-white/45">· {s.deviceName}</span>
+                    {s.client} <span className="font-normal text-white/45">· {s.deviceName}</span>
                   </div>
                   <div className="truncate text-lg text-white/45">
                     {s.nowPlayingName ?? (s.isPlaying ? 'Playing' : 'Idle')}
@@ -105,8 +106,9 @@ export function RemoteSheet({ onClose }: { onClose: () => void }) {
             ))
           )}
           <div className="px-4 pt-4 text-lg leading-snug text-white/35">
-            While a Finamp session is selected, audio plays in Finamp and Finch is only the remote —
-            transport, seek and queue all drive the phone's own player.
+            While a remote session is selected, audio plays in that app and Finch is only the remote —
+            transport, seek and queue all drive the other player. Sessions are listed most recently
+            active first.
           </div>
         </div>
       </div>

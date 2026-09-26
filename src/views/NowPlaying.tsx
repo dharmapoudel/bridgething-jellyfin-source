@@ -230,7 +230,7 @@ function InfoPanel({
                 onClick={onOpenRemote}
                 className="rounded-full border border-white/15 px-4 py-2 text-lg text-white/65 active:bg-white/10"
               >
-                {player.remoteActive ? `Finamp · ${player.remoteDevice}` : 'This device'}
+                {player.remoteActive ? `via ${player.remoteClient}` : 'This device'}
               </button>
             </div>
 
@@ -244,7 +244,7 @@ function InfoPanel({
               </div>
               <div className="mt-1.5 line-clamp-2 text-[1.25rem] text-white/55">{t.artist}</div>
               {player.remoteActive ? (
-                <div className="mt-1 text-[1.05rem] text-leaf">Playing in Finamp on {player.remoteDevice}</div>
+                <div className="mt-1 text-[1.05rem] text-leaf">Playing on {player.remoteDevice}</div>
               ) : null}
             </div>
 
@@ -468,7 +468,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
             onClick={() => setRemoteOpen(true)}
             className="h-18 rounded-full border border-white/20 px-8 text-2xl font-bold text-white/80 active:bg-white/10"
           >
-            Play on Finamp
+            Play on phone
           </button>
           <button
             type="button"
