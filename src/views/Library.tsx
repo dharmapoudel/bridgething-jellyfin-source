@@ -14,9 +14,9 @@ import type { LibTab, ViewProps } from '../nav';
 const LIB_PAGE = 120;
 
 const TABS: { id: LibTab; label: string }[] = [
+  { id: 'playlists', label: 'Playlists' },
   { id: 'albums', label: 'Albums' },
   { id: 'artists', label: 'Artists' },
-  { id: 'playlists', label: 'Playlists' },
   { id: 'genres', label: 'Genres' },
 ];
 

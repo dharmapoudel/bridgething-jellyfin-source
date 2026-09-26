@@ -14,7 +14,7 @@ import Setup, { CREDS_KEY, type StoredCreds } from './views/Setup';
 
 const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | 'note'; label: string }[] = [
   { view: { name: 'home' }, icon: 'home', label: 'Home' },
-  { view: { name: 'library', tab: 'albums' }, icon: 'library', label: 'Library' },
+  { view: { name: 'library', tab: 'playlists' }, icon: 'library', label: 'Library' },
   { view: { name: 'queue' }, icon: 'queue', label: 'Queue' },
 ];
 
@@ -236,7 +236,7 @@ export default function App() {
       // preset shortcuts, ignored while typing in the on-screen keyboard views
       if (v.name === 'setup') return;
       if (e.key === '1') nav({ name: 'home' });
-      else if (e.key === '2') nav({ name: 'library', tab: 'albums' });
+      else if (e.key === '2') nav({ name: 'library', tab: 'playlists' });
       else if (e.key === '4') nav({ name: 'nowplaying' });
     };
     const onWheel = (e: WheelEvent): void => {
