@@ -217,9 +217,9 @@ function InfoPanel({
       />
       <div className="relative flex min-h-0 flex-1 flex-col px-5 py-4">
         <div className="flex min-h-0 flex-1 flex-col gap-5">
-          {/* track info ends at the seek row; the controls take the space
-              below and sit centered in it */}
-          <div className="flex shrink-0 flex-col gap-4 py-1">
+          {/* the track takes the space above; the seek bar + controls hold
+              the bottom edge */}
+          <div className="flex min-h-0 flex-1 flex-col justify-between gap-4 py-1">
             <div className="flex shrink-0 justify-start">
               <Clock />
             </div>
@@ -234,19 +234,19 @@ function InfoPanel({
               </div>
               <div className="mt-1.5 line-clamp-2 text-[1.25rem] text-white/55">{t.artist}</div>
             </div>
-
-            <div className="shrink-0">
-              <ProgressBar onSeek={ms => void player.seekTo(ms)} />
-            </div>
           </div>
 
-          {/* one transport row, centered between the seek row and the bottom
-              edge: lyrics left of previous, heart right of next.
+          {/* the seek bar rides just above the controls */}
+          <div className="shrink-0">
+            <ProgressBar onSeek={ms => void player.seekTo(ms)} />
+          </div>
+
+          {/* one transport row at the bottom edge, where the lyrics+heart row
+              used to be: lyrics left of previous, heart right of next.
               o-music transport: bare glyphs, no circles; play/pause takes the
               cover's accent color, skips stay off-white. Inactive lyrics/heart
               icons are translucent; the active state is a solid green icon. */}
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2">
-            <div className={`flex items-center justify-center ${small ? 'gap-12' : 'gap-10'}`}>
+          <div className={`flex shrink-0 items-center justify-center ${small ? 'gap-12' : 'gap-10'}`}>
               {lyricsSupported !== false ? (
                 <Ghost
                   label={
@@ -312,7 +312,6 @@ function InfoPanel({
             ) : player.external ? (
               <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
             ) : null}
-          </div>
         </div>
       </div>
     </div>

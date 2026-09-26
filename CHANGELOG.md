@@ -211,3 +211,6 @@
 
 ## 0.1.45
 - Now Playing layout: the lyrics and heart icons move into the transport row (lyrics left of previous, heart right of next) instead of their own row, and the single controls row is centered vertically between the seek bar and the bottom of the screen.
+
+## 0.1.46
+- Now Playing layout revision: the seek bar moves down to sit just above the controls, and the single transport row (lyrics left of previous, heart right of next) sits at the bottom edge where the old lyrics+heart row was.
