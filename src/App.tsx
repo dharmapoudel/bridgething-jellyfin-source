@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getClient } from './client';
-import { ArtCtx, Icon, useMenu, usePlayer, usePortrait, type ArtResolver, type MenuAction } from './components';
+import { ArtCtx, Icon, useMenu, usePlayer, type ArtResolver, type MenuAction } from './components';
 import { JellyfinClient, type Creds } from './jellyfin';
 import { player } from './player';
 import type { View } from './nav';
@@ -17,6 +17,60 @@ const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | '
   { view: { name: 'library', tab: 'playlists' }, icon: 'library', label: 'Library' },
   { view: { name: 'queue' }, icon: 'queue', label: 'Queue' },
 ];
+
+// o-music-style top tab strip: each tab is a line with its label below it, like
+// o-music's COVER label. The bottom nav bar is gone to reclaim vertical space.
+// Tapping a tab animates its line pushing down to reveal the tab's icon.
+function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
+  const activeIdx = view.name === 'home' ? 0 : view.name === 'queue' ? 2 : 1;
+  return (
+    <div className="flex shrink-0 items-stretch border-b border-white/10 px-3">
+      {NAV_ITEMS.map((item, i) => {
+        const active = i === activeIdx;
+        return (
+          <button
+            key={item.label}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onNav(item.view)}
+            className="flex flex-1 flex-col items-center justify-end px-2 pt-2.5 pb-2 active:bg-white/5"
+          >
+            {/* the line */}
+            <div
+              className={`h-[3px] rounded-full transition-all duration-300 ${
+                active ? 'w-12 bg-leaf' : 'w-8 bg-white/20'
+              }`}
+            />
+            {/* the icon: hidden by default, the line pushes down to reveal it */}
+            <div
+              className={`grid transition-all duration-300 ease-out ${
+                active ? 'mt-1.5 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'
+              }`}
+            >
+              <div className="overflow-hidden">
+                <div
+                  className={`text-leaf transition-transform duration-300 ease-out ${
+                    active ? 'translate-y-0' : '-translate-y-2'
+                  }`}
+                >
+                  <Icon name={item.icon} size={24} />
+                </div>
+              </div>
+            </div>
+            {/* the label, o-music COVER style */}
+            <span
+              className={`mt-1 text-xs tracking-[0.22em] uppercase transition-colors duration-300 ${
+                active ? 'font-semibold text-white' : 'text-white/45'
+              }`}
+            >
+              {item.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 async function readCreds(): Promise<Creds | null> {
   const client = getClient();
@@ -65,7 +119,6 @@ export default function App() {
   const [daemonUp, setDaemonUp] = useState(true);
   const menu = useMenu();
   usePlayer();
-  const portrait = usePortrait();
 
   const view = stack[stack.length - 1];
   const viewRef = useRef(view);
@@ -312,6 +365,7 @@ export default function App() {
             Lost connection to the device. Reconnect to continue.
           </div>
         ) : null}
+        {showChrome ? <TopTabs view={view} onNav={nav} /> : null}
         <div className="relative min-h-0 flex-1">{renderView()}</div>
         {/* Queue bar on every screen while a song is playing; the mini player is gone. */}
         {current ? <QueueHandle onOpen={() => setQueueOpen(true)} /> : null}
@@ -323,30 +377,6 @@ export default function App() {
               nav({ name: 'nowplaying' });
             }}
           />
-        ) : null}
-        {showChrome ? (
-          // In portrait the physical knob overlaps the bottom-right corner, so
-          // the nav floats above it instead of sitting flush at the bottom.
-          <nav className={`flex h-20 shrink-0 items-stretch border-t border-white/10 bg-zinc-950 ${portrait ? 'mb-14' : ''}`}>
-            {NAV_ITEMS.map(item => {
-              const active =
-                view.name === item.view.name ||
-                (item.view.name === 'library' && view.name === 'library');
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => nav(item.view)}
-                  className={`flex flex-1 flex-col items-center justify-center gap-1 ${
-                    active ? 'text-leaf' : 'text-white/55 active:bg-white/10'
-                  }`}
-                >
-                  <Icon name={item.icon} size={30} />
-                  {portrait ? <span className="text-base leading-none">{item.label}</span> : null}
-                </button>
-              );
-            })}
-          </nav>
         ) : null}
         {menu.sheet}
       </div>
