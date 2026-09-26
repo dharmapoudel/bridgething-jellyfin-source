@@ -263,7 +263,11 @@ function InfoPanel({
                 >
                   <Icon name="note" size={24} />
                 </Ghost>
-              ) : null}
+              ) : (
+                // Old servers (< 10.9) hide the lyrics toggle entirely; keep a
+                // same-size spacer so prev/play/next stay centered.
+                <div className="w-12 shrink-0" aria-hidden="true" />
+              )}
               <div className={`flex items-center ${small ? 'gap-12' : 'gap-10'}`}>
               <Ghost label="Previous" onClick={() => void player.prev()}>
                 <TransportGlyph

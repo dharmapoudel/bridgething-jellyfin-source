@@ -223,3 +223,6 @@
 
 ## 0.1.49
 - Now Playing: the lyrics and heart buttons are pinned to the transport row's extremes, their icons lined up exactly with the seek bar's start and end. Previous/play/next stay centered between them, untouched.
+
+## 0.1.50
+- Now Playing: on servers without lyrics support (the toggle hides entirely), a same-size spacer keeps prev/play/next centered instead of the row collapsing left.
