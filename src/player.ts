@@ -40,6 +40,9 @@ const SEEK_PACE_MS = 800;
 // end; the watchdog below re-checks every END_WATCH_MS as a backstop.
 const END_EPS_MS = 2000;
 const END_WATCH_MS = 5000;
+// How close to the end (by our clock) before we start polling the phone
+// directly instead of waiting for its end-of-track snapshot.
+const END_POLL_WINDOW_MS = 10_000;
 
 export interface PersistedQueue {
   tracks: Track[];
@@ -192,22 +195,67 @@ export class PlaybackEngine {
         void this.jf.reportProgress(t.id, this.sessionId, this.positionNow(), false);
       }
     }, PROGRESS_REPORT_MS);
-    // End-of-track backstop: if the phone never reports stopped/paused at
-    // the end and just sits at the duration cap still claiming "playing",
-    // the queue would strand. Advance when our clock is parked at the cap
-    // AND the phone's last word also had it at the cap (so a buffering
-    // stall mid-track can never trigger it). The link-down case is owned
-    // by the reconnect heal, not this timer.
+    // End-of-track backstop. The phone doesn't reliably report stopped /
+    // paused when a track ends — it can go completely quiet — so in the
+    // last seconds we stop waiting for its snapshot and ask it directly.
+    // A fresh stateGet self-corrects our clock during stalls (the seek bar
+    // stops lying) and lets the normal snapshot branches advance the queue
+    // with fresh data; if the phone still claims "playing" at the cap, the
+    // track is over and we advance. Link-down ends stay owned by the
+    // reconnect heal, not this timer.
     this.endWatchTimer = window.setInterval(() => {
       const t = this.current();
       if (!t || !this.intentPlaying || this.awaitingStart || this.external) return;
       if (this.gatewayUp === false) return;
       const durMs = t.durationMs;
       if (!(durMs > 0)) return;
-      if (this.positionNow() >= durMs && this.snapPositionMs >= durMs - END_EPS_MS) {
+      if (this.positionNow() < durMs - END_POLL_WINDOW_MS) return;
+      void this.pollEndOfTrack(t.id, durMs);
+    }, END_WATCH_MS);
+  }
+
+  // Re-arm the timers if they died: pause clears them and resume never
+  // re-armed them (only playAt did), which silently killed both scrobble
+  // reports and the end-of-track backstop after any pause/resume cycle.
+  private ensureTimers(): void {
+    if (this.progressTimer === null) this.armProgressTimer();
+  }
+
+  private endPolling = false;
+
+  private async pollEndOfTrack(trackId: string, durMs: number): Promise<void> {
+    if (this.endPolling) return;
+    this.endPolling = true;
+    try {
+      const res = await getClient().player.stateGet();
+      if (!res.ok) return;
+      // The track changed while we were asking (user skipped, another
+      // path advanced): this answer is stale, drop it.
+      if (this.current()?.id !== trackId) return;
+      const st = res.response.state;
+      const pb = st.playback;
+      // Feed the fresh state through the normal path so the clock, intent,
+      // and the paused-end / stopped branches stay consistent.
+      this.handleSnapshot({
+        context: st.context ? { uri: st.context.uri } : null,
+        playback: { state: pb.state, positionMs: pb.positionMs },
+      });
+      // The phone is parked at the cap still claiming "playing": the track
+      // ended with no end signal. Advance — but only if the snapshot above
+      // didn't already move us off this track.
+      const cur = this.current();
+      if (
+        cur && cur.id === trackId &&
+        this.intentPlaying && !this.awaitingStart && !this.external &&
+        pb.state === 'playing' && pb.positionMs >= durMs - END_EPS_MS
+      ) {
         void this.next(true);
       }
-    }, END_WATCH_MS);
+    } catch {
+      // link hiccup mid-poll: skip this tick, the next one retries
+    } finally {
+      this.endPolling = false;
+    }
   }
 
   private clearProgressTimer(): void {
@@ -519,6 +567,7 @@ export class PlaybackEngine {
       if (pauseGrace) return;
       const oursBefore = this.positionNow();
       this.intentPlaying = true;
+      this.ensureTimers();
       this.loading = false;
       this.awaitingStart = false;
       this.error = null;
