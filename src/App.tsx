@@ -89,12 +89,17 @@ export default function App() {
     await player.loadPrefs();
     setJf(client);
     setCredsState('ready');
-    // Re-attach to the remote session, if any.
-    void player.reconcileRemote();
-    // If something is already playing from the server (app was restarted
-    // while the phone kept playing, or a session is active), adopt it so the
-    // UI shows the true now-playing status instead of an empty player.
-    void player.reconcileOnResume();
+    // Re-attach to the remote session, if any; then adopt anything already
+    // playing; then, if the player is still empty, restore the last local
+    // queue so a restart doesn't lose it. Sequenced (not fire-and-forget)
+    // so each step can see what the previous one adopted.
+    try {
+      await player.reconcileRemote();
+      await player.reconcileOnResume();
+      await player.restorePersistedQueue();
+    } catch {
+      // non-fatal: the player just starts empty
+    }
   }, []);
 
   // daemon link + player/volume subscriptions, once

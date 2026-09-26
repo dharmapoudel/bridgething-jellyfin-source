@@ -1361,6 +1361,30 @@ export class PlaybackEngine {
     }
     return null;
   }
+
+  // Cold-start queue restore, called after reconcileRemote() and
+  // reconcileOnResume() have had their say. If neither re-attached a live
+  // session nor adopted something already playing, bring back the last
+  // local queue — paused at its saved position — so closing the app
+  // doesn't lose the playlist/album you were in. Anything live (remote
+  // session, companion snapshot, server session) always wins over this.
+  async restorePersistedQueue(): Promise<void> {
+    if (this.remoteActive || this.current() || !this.jf) return;
+    const saved = await this.loadPersisted();
+    if (!saved || this.remoteActive || this.current()) return;
+    const track = saved.tracks[saved.index];
+    this.queue = saved.tracks;
+    this.index = saved.index;
+    this.durationMs = track.durationMs;
+    this.positionMs = track.durationMs > 0 ? Math.min(Math.max(0, saved.positionMs), track.durationMs) : Math.max(0, saved.positionMs);
+    this.positionAt = Date.now();
+    this.intentPlaying = false;
+    this.loading = false;
+    this.external = false;
+    this.error = null;
+    this.errorDetail = null;
+    this.emit();
+  }
 }
 
 export const player = new PlaybackEngine();
