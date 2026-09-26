@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { albumActions, playlistActions, trackActions } from '../actions';
+import { trackActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
 import {
   AmbientArt,
+  Artwork,
   AuthError,
   Empty,
   Rise,
@@ -16,7 +17,7 @@ import {
   type MenuAction,
 } from '../components';
 import { player } from '../player';
-import { isAuthError, type Album, type Playlist, type Track } from '../jellyfin';
+import { isAuthError, type Album, type Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
 
 function useLoad<T>(key: string | null, load: () => Promise<T>): {
@@ -109,10 +110,9 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
 
   const recent = useLoad<Track[]>('home:recent', () => jf.recentlyPlayedTracks(12));
   const added = useLoad<Album[]>('home:added', () => jf.recentlyAddedAlbums(12));
-  // Server-side limits: fetching every favorite/playlist as one giant JSON
-  // blob was knocking the Bluetooth link over; only 12 are ever shown.
+  // Server-side limit: fetching every favorite as one giant JSON blob was
+  // knocking the Bluetooth link over; only 12 are ever shown.
   const favs = useLoad<Track[]>('home:favs', () => jf.favorites(12));
-  const playlists = useLoad<Playlist[]>('home:playlists', () => jf.playlists(12));
 
   // No artwork prefetch on Home mount: the rails' JSON is in flight at the
   // same moment, and the combined burst was dropping the Bluetooth link.
@@ -128,7 +128,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
   const ambientSrc = ambientTrack && art ? (art.trackArt(ambientTrack, 256) ?? null) : null;
   const accent = useArtAccent(ambientSrc);
 
-  const anyError = recent.error || added.error || favs.error || playlists.error;
+  const anyError = recent.error || added.error || favs.error;
 
   return (
     <div className="relative h-full overflow-y-auto">
@@ -137,8 +137,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
         {anyError ? (
           isAuthError(recent.rawError) ||
           isAuthError(added.rawError) ||
-          isAuthError(favs.rawError) ||
-          isAuthError(playlists.rawError) ? (
+          isAuthError(favs.rawError) ? (
             <AuthError
               text="Jellyfin rejected the saved sign-in. Reconnect with Quick Connect or an API key."
               onReconnect={() => nav({ name: 'setup' })}
@@ -150,7 +149,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
 
         {recent.data ? (
           <Rise>
-            <Rail title="Continue listening">
+            <Rail title="Recent tracks">
               {recent.data.map((t, i) => {
                 const isCurrent = nowActive && t.id === nowId;
                 return (
@@ -180,26 +179,45 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
 
         {added.data ? (
           <Rise>
-            <Rail title="Recently added" onSeeAll={() => nav({ name: 'library', tab: 'albums' })}>
-              {added.data.map((a, i) => (
-                <Rise key={a.id} i={i}>
-                  <Tile
-                    size={180}
-                    title={a.name}
-                    subtitle={a.artist}
-                    art={art?.albumArt(a) ?? null}
-                    onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
-                    onMenu={() => openMenu(a.name, albumActions(a, jf, nav))}
-                  />
-                </Rise>
-              ))}
-            </Rail>
+            <section className="mb-7 shrink-0">
+              <div className="mb-2 flex items-center justify-between px-5">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.22em] text-white/80">
+                  Recently added
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => nav({ name: 'library', tab: 'albums' })}
+                  className="rounded-full px-4 py-2 text-lg font-medium text-goldlight active:bg-white/10"
+                >
+                  See all
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 px-5">
+                {added.data.map((a, i) => (
+                  <Rise key={a.id} i={i}>
+                    <button
+                      type="button"
+                      onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
+                      className="flex w-full items-center gap-3 py-2 text-left active:opacity-80"
+                    >
+                      <Artwork src={art?.albumArt(a) ?? null} size={56} rounded="rounded-lg" label={a.name} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-lg font-medium text-white">{a.name}</span>
+                        <span className="block truncate text-base text-white/50">
+                          {a.songCount} Tracks | {a.artist}
+                        </span>
+                      </span>
+                    </button>
+                  </Rise>
+                ))}
+              </div>
+            </section>
           </Rise>
         ) : null}
 
         {favs.data && favs.data.length ? (
           <section className="mb-7 px-3">
-            <h2 className="mb-2.5 px-2 text-2xl font-bold tracking-tight">Favorites</h2>
+            <h2 className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/80">Favorites</h2>
             {favs.data.slice(0, 5).map((t, i) => (
               <Rise key={t.id} i={i}>
                 <TrackRow
@@ -214,25 +232,6 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
               </Rise>
             ))}
           </section>
-        ) : null}
-
-        {playlists.data && playlists.data.length ? (
-          <Rise>
-            <Rail title="Playlists" onSeeAll={() => nav({ name: 'library', tab: 'playlists' })}>
-              {playlists.data.map((p, i) => (
-                <Rise key={p.id} i={i}>
-                  <Tile
-                    size={180}
-                    title={p.name}
-                    subtitle={p.songCount ? `${p.songCount} tracks` : undefined}
-                    art={art?.playlistArt(p) ?? null}
-                    onClick={() => nav({ name: 'detail', kind: 'playlist', id: p.id, title: p.name })}
-                    onMenu={() => openMenu(p.name, playlistActions(p, jf, nav))}
-                  />
-                </Rise>
-              ))}
-            </Rail>
-          </Rise>
         ) : null}
       </div>
     </div>

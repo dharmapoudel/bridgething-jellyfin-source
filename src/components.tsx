@@ -549,8 +549,8 @@ export function Tile({
   return (
     <div className="relative shrink-0" style={{ width: size }}>
       <button type="button" onClick={onClick} className="block w-full text-left active:opacity-80">
-        <div className={active ? 'rounded-3xl ring-2 ring-inset ring-leaf' : undefined}>
-          <Artwork src={art} size={size} rounded="rounded-3xl" label={title} />
+        <div className={active ? 'rounded-2xl ring-2 ring-inset ring-leaf' : undefined}>
+          <Artwork src={art} size={size} rounded="rounded-2xl" label={title} />
         </div>
         <div className={`mt-2 truncate text-lg leading-tight font-medium ${active ? 'text-leaf' : ''}`}>{title}</div>
         {subtitle ? <div className="truncate text-base leading-tight text-white/50">{subtitle}</div> : null}
@@ -831,8 +831,8 @@ export function GridCard({
 }) {
   return (
     <div className="relative cursor-pointer" onClick={onClick}>
-      <div className={active ? 'rounded-3xl ring-2 ring-inset ring-leaf' : undefined}>
-        <Artwork src={art} size={320} rounded="rounded-3xl" label={title} fluid />
+      <div className={active ? 'rounded-2xl ring-2 ring-inset ring-leaf' : undefined}>
+        <Artwork src={art} size={320} rounded="rounded-2xl" label={title} fluid />
       </div>
       <div className={`mt-2 truncate px-1 text-lg leading-tight font-semibold ${active ? 'text-leaf' : ''}`}>
         {title}
@@ -866,7 +866,7 @@ export function Rise({ i = 0, className = '', children }: { i?: number; classNam
 export function SkeletonTile({ size = 180 }: { size?: number }) {
   return (
     <div className="shrink-0" style={{ width: size }} aria-hidden>
-      <div className="skeleton rounded-3xl" style={{ width: size, height: size }} />
+      <div className="skeleton rounded-2xl" style={{ width: size, height: size }} />
       <div className="skeleton mt-2 h-6 w-4/5 rounded-md" />
       <div className="skeleton mt-1.5 h-5 w-3/5 rounded-md" />
     </div>
@@ -876,7 +876,7 @@ export function SkeletonTile({ size = 180 }: { size?: number }) {
 export function SkeletonGridCard() {
   return (
     <div aria-hidden>
-      <div className="skeleton aspect-square w-full rounded-3xl" />
+      <div className="skeleton aspect-square w-full rounded-2xl" />
       <div className="skeleton mt-2 h-6 w-4/5 rounded-md" />
       <div className="skeleton mt-1.5 h-5 w-3/5 rounded-md" />
     </div>
