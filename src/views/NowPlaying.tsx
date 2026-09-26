@@ -3,6 +3,7 @@ import { Ghost, Icon, ProgressBar, TransportGlyph, useArt, useCachedArt, usePlay
 import { useAccent, type Accent } from '../accent';
 import type { LyricLineVM } from '../jellyfin';
 import { player } from '../player';
+import { RemoteSheet } from '../RemoteSheet';
 import type { ViewProps } from '../nav';
 
 // Lyrics view state. Shape borrowed from Ousa-Music-Player's useLyrics:
@@ -177,6 +178,7 @@ function InfoPanel({
   hasLyrics,
   accent,
   bgArtUrl,
+  onOpenRemote,
 }: {
   isFavorite: boolean;
   onToggleFav: () => void;
@@ -186,6 +188,7 @@ function InfoPanel({
   hasLyrics: boolean;
   accent: Accent | null;
   bgArtUrl: string | null;
+  onOpenRemote: () => void;
 }) {
   usePlayer();
   const portrait = usePortrait();
@@ -219,8 +222,16 @@ function InfoPanel({
         <div className="flex min-h-0 flex-1 flex-col gap-5">
           {/* the track takes the space above; the controls hold the bottom edge whatever is left */}
           <div className="flex min-h-0 flex-1 flex-col justify-between gap-4 py-1">
-            <div className="flex shrink-0 justify-start">
+            <div className="flex shrink-0 items-center justify-between">
               <Clock />
+              <button
+                type="button"
+                aria-label="Choose playback device"
+                onClick={onOpenRemote}
+                className="rounded-full border border-white/15 px-4 py-2 text-lg text-white/65 active:bg-white/10"
+              >
+                {player.remoteActive ? `Finamp · ${player.remoteDevice}` : 'This device'}
+              </button>
             </div>
 
             <div className="min-w-0 shrink-0">
@@ -232,6 +243,9 @@ function InfoPanel({
                 {t.name}
               </div>
               <div className="mt-1.5 line-clamp-2 text-[1.25rem] text-white/55">{t.artist}</div>
+              {player.remoteActive ? (
+                <div className="mt-1 text-[1.05rem] text-leaf">Playing in Finamp on {player.remoteDevice}</div>
+              ) : null}
             </div>
 
             <div className="shrink-0">
@@ -330,6 +344,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   usePlayer();
   const art = useArt();
   const portrait = usePortrait();
+  const [remoteOpen, setRemoteOpen] = useState(false);
   const [lyricsSupported, setLyricsSupported] = useState<boolean | null>(null);
   const [lyrics, setLyrics] = useState<LyricsState>({ state: 'loading' });
   // Sticky preference owned by the player (persisted across restarts):
@@ -444,17 +459,27 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
 
   if (!t) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-6 px-8 text-center">
-        <Icon name="note" size={96} className="text-white/20" />
-        <div className="text-3xl font-semibold text-white/70">Nothing playing</div>
-        <button
-          type="button"
-          onClick={() => nav({ name: 'home' })}
-          className="h-18 rounded-full bg-leaf px-8 text-2xl font-bold text-black active:brightness-90"
-        >
-          Browse your library
-        </button>
-      </div>
+      <>
+        <div className="flex h-full flex-col items-center justify-center gap-6 px-8 text-center">
+          <Icon name="note" size={96} className="text-white/20" />
+          <div className="text-3xl font-semibold text-white/70">Nothing playing</div>
+          <button
+            type="button"
+            onClick={() => setRemoteOpen(true)}
+            className="h-18 rounded-full border border-white/20 px-8 text-2xl font-bold text-white/80 active:bg-white/10"
+          >
+            Play on Finamp
+          </button>
+          <button
+            type="button"
+            onClick={() => nav({ name: 'home' })}
+            className="h-18 rounded-full bg-leaf px-8 text-2xl font-bold text-black active:brightness-90"
+          >
+            Browse your library
+          </button>
+        </div>
+        {remoteOpen ? <RemoteSheet onClose={() => setRemoteOpen(false)} /> : null}
+      </>
     );
   }
 
@@ -511,26 +536,33 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
       hasLyrics={hasLyrics}
       accent={accent}
       bgArtUrl={bgArt}
+      onOpenRemote={() => setRemoteOpen(true)}
     />
   );
 
   if (portrait) {
     return (
-      <div className="relative flex h-full flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        <div ref={artPanelRef} className="w-full shrink-0 overflow-hidden" style={{ height: '48%' }}>
-          {artPanel}
+      <>
+        <div className="relative flex h-full flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          <div ref={artPanelRef} className="w-full shrink-0 overflow-hidden" style={{ height: '48%' }}>
+            {artPanel}
+          </div>
+          <div className="min-h-0 flex-1">{infoPanel}</div>
         </div>
-        <div className="min-h-0 flex-1">{infoPanel}</div>
-      </div>
+        {remoteOpen ? <RemoteSheet onClose={() => setRemoteOpen(false)} /> : null}
+      </>
     );
   }
 
   return (
-    <div className="relative flex h-full" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div ref={artPanelRef} className="h-full w-[55%] shrink-0 overflow-hidden">
-        {artPanel}
+    <>
+      <div className="relative flex h-full" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div ref={artPanelRef} className="h-full w-[55%] shrink-0 overflow-hidden">
+          {artPanel}
+        </div>
+        <div className="h-full min-w-0 flex-1">{infoPanel}</div>
       </div>
-      <div className="h-full min-w-0 flex-1">{infoPanel}</div>
-    </div>
+      {remoteOpen ? <RemoteSheet onClose={() => setRemoteOpen(false)} /> : null}
+    </>
   );
 }

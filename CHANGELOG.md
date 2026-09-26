@@ -1,3 +1,7 @@
+## 0.1.54
+- Play on Finamp (remote mode): Finch can now remote-control a Finamp session on your phone instead of playing through the companion app. Pick it from the device pill in Now Playing (or the "Play on Finamp" button when nothing is playing): transport, seek and queue all drive Finamp's own player through the Jellyfin server, while audio, lock-screen info and offline downloads stay in Finamp. The remote track is mirrored into Now Playing and the queue view; a server poll every 3s keeps the clock honest. If the Finamp session disappears, Finch falls back to the companion path. The selection persists across app restarts.
+- Remote-mode notes: shuffle/repeat and queue editing belong to Finamp while remote — Finch only mirrors. Knob volume still adjusts the phone's system volume.
+
 ## 0.1.40
 - "Can't seek" fixes: (1) after "Playback failed", tapping play now restarts the track instead of calling resume() on the phone's dead player — resume just failed again and looped the error. One tap recovers. (2) a phone snapshot arriving during the 800ms paced-seek window no longer snaps our clock back to the pre-seek position (the phone hasn't received the seek yet); the bar now stays where the finger put it. (3) if the phone-bound seek send itself throws (link flapped mid-send), it retries once 2s later instead of silently dropping the seek.
 

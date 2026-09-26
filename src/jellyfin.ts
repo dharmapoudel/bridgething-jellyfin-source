@@ -141,10 +141,12 @@ export function isAuthError(e: unknown): boolean {
   return e instanceof JellyfinError && (e.status === 401 || e.status === 403);
 }
 
-interface RawSession {
-  Id?: string;
+export interface RawSession {
+  Id: string;
   UserId?: string;
   DeviceId?: string;
+  DeviceName?: string;
+  Client?: string;
   LastActivityDate?: string;
   NowPlayingItem?: RawItem | null;
   PlayState?: { IsPaused?: boolean; PositionTicks?: number } | null;
@@ -521,6 +523,30 @@ export class JellyfinClient {
       () => undefined,
       () => undefined,
     );
+  }
+
+  // Remote control of another Jellyfin session ("Play on", the same
+  // mechanism Jellyfin Web uses; Finamp implements the receiving end).
+  // Sessions are limited to the ones this user is allowed to drive.
+  async rawSessions(): Promise<RawSession[]> {
+    return this.request<RawSession[]>('GET', '/Sessions', { ControllableByUserId: this.creds.userId });
+  }
+
+  // PlaystateCommand for one session: Pause/Unpause/NextTrack/
+  // PreviousTrack/Seek (with SeekPositionTicks)/Stop.
+  async remotePlaystate(sessionId: string, command: string, body: Record<string, unknown>): Promise<void> {
+    await this.request<void>(
+      'POST',
+      `/Sessions/${encodeURIComponent(sessionId)}/Playing/${encodeURIComponent(command)}`,
+      {},
+      body,
+    );
+  }
+
+  // Instruct one session to start playing items (the client builds its own
+  // queue from ItemIds, starting at StartIndex).
+  async remotePlay(sessionId: string, body: Record<string, unknown>): Promise<void> {
+    await this.request<void>('POST', `/Sessions/${encodeURIComponent(sessionId)}/Play`, {}, body);
   }
 
   // Resume detection: fetch one library item as a Track.
