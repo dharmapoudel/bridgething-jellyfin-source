@@ -226,3 +226,6 @@
 
 ## 0.1.50
 - Now Playing: on servers without lyrics support (the toggle hides entirely), a same-size spacer keeps prev/play/next centered instead of the row collapsing left.
+
+## 0.1.51
+- Now Playing transport row: explicit w-full (belt and suspenders over flex stretch), plus a temporary tiny diagnostic readout (version + measured row width, bottom-right) to confirm on-device which build is running and whether the row spans the panel. Removed once confirmed.

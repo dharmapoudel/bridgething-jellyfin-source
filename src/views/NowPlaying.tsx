@@ -194,6 +194,15 @@ function InfoPanel({
   const small = !portrait;
   const t = player.current();
 
+  // TEMP diagnostic (0.1.51): measure the transport row's real on-device
+  // width so we can tell whether it spans the panel or shrink-wraps.
+  // Removed once the layout is confirmed.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [rowW, setRowW] = useState(0);
+  useEffect(() => {
+    setRowW(rowRef.current?.offsetWidth ?? 0);
+  }, []);
+
   if (!t) return null;
 
   return (
@@ -246,7 +255,7 @@ function InfoPanel({
               outer side so the 24px icon starts at the bar's edge);
               prev/play/next stay centered between them, untouched.
               Inactive icons are translucent, the active state is solid green. */}
-          <div className="flex shrink-0 items-center justify-between">
+          <div ref={rowRef} className="flex w-full shrink-0 items-center justify-between">
               {lyricsSupported !== false ? (
                 <Ghost
                   label={
@@ -319,6 +328,11 @@ function InfoPanel({
               <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
             ) : null}
         </div>
+      </div>
+      {/* TEMP diagnostic (0.1.51): proves which build is on-device and the
+          transport row's measured width. Removed once the layout is confirmed. */}
+      <div className="pointer-events-none absolute bottom-1 right-2 z-10 text-[10px] leading-none text-white/30">
+        v0.1.51 · row {rowW}px
       </div>
     </div>
   );
