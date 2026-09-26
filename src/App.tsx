@@ -262,11 +262,12 @@ export default function App() {
     () =>
       jf
         ? {
-            // list/grid thumbs render at 56-160px: 300px source is plenty.
-            trackArt: (t, w = 300) => jf.trackImage(t, w),
-            albumArt: (a, w = 300) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
-            artistArt: (a, w = 300) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
-            playlistArt: (p, w = 300) => (p.imageTag ? jf.imageUrl(p.id, w) : null),
+            // list/grid thumbs render at 56-160px: 256px source is plenty, and
+            // every byte rides the Bluetooth link via net.fetch.
+            trackArt: (t, w = 256) => jf.trackImage(t, w),
+            albumArt: (a, w = 256) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
+            artistArt: (a, w = 256) => (a.imageTag ? jf.imageUrl(a.id, w) : null),
+            playlistArt: (p, w = 256) => (p.imageTag ? jf.imageUrl(p.id, w) : null),
           }
         : null,
     [jf],

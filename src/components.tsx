@@ -14,12 +14,17 @@ import {
 } from 'react';
 import { player } from './player';
 import { getClient } from './client';
+import { gatedNet } from './netgate';
 import type { Album, Artist, Playlist, Track } from './jellyfin';
 
 // ---- artwork cache ----
-// Small images, fetched once through the daemon and kept as in-memory blob
-// URLs: every repeat render (scrolling back, switching tabs) is instant and
-// never re-hits the server. LRU-capped so memory stays bounded.
+// Three tiers. (1) In-memory blob URLs (LRU 120): repeat renders within a
+// session never re-hit the network. (2) Persistent daemon-store cache
+// (LRU 48, base64 JPEG): a cold start paints art it already saw without
+// downloading a byte. (3) Network — every fetch draws from the shared
+// netgate pool (3 slots total across JSON, art, and commands), so artwork
+// can never wedge the phone companion on its own no matter how many tiles
+// mount at once.
 const ART_CACHE_MAX = 120;
 const artObjects = new Map<string, string>(); // source url -> blob object url
 const artInflight = new Map<string, Promise<string | null>>();
@@ -32,73 +37,116 @@ function evictOldestArt(): void {
   artObjects.delete(oldest.value);
 }
 
-async function loadArt(url: string): Promise<string | null> {
+function rememberArt(url: string, obj: string): void {
+  const hit = artObjects.get(url);
+  if (hit && hit !== obj) URL.revokeObjectURL(hit);
+  else artObjects.delete(url);
+  while (artObjects.size >= ART_CACHE_MAX) evictOldestArt();
+  artObjects.set(url, obj); // (re-)inserted at the young end: LRU order
+}
+
+// ---- persistent art tier (daemon store, survives restarts) ----
+const PART_PREFIX = 'finch:art:';
+const PART_INDEX = 'finch:art:index';
+const PART_MAX = 48;
+
+function hashUrl(url: string): string {
+  let h = 5381;
+  for (let i = 0; i < url.length; i++) h = ((h << 5) + h + url.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16);
+}
+
+function bytesToB64(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 8192) {
+    s += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  return btoa(s);
+}
+
+function b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const s = atob(b64);
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+}
+
+async function persistRead(key: string): Promise<string | null> {
+  try {
+    const r = await getClient().store.get({ key });
+    if (r.ok && r.response.value) return r.response.value;
+  } catch {
+    // store unavailable: the memory tier still covers this session
+  }
+  return null;
+}
+
+// Write-through, fire-and-forget: a full/failed store must never break art.
+function persistWriteArt(url: string, bytes: Uint8Array): void {
+  void (async () => {
+    try {
+      const key = PART_PREFIX + hashUrl(url);
+      const client = getClient();
+      await client.store.put({ key, value: bytesToB64(bytes) });
+      const idxRaw = await persistRead(PART_INDEX);
+      const idx: string[] = idxRaw ? (JSON.parse(idxRaw) as string[]) : [];
+      const at = idx.indexOf(key);
+      if (at >= 0) idx.splice(at, 1);
+      idx.push(key);
+      while (idx.length > PART_MAX) {
+        const old = idx.shift()!;
+        if (old !== key) void client.store.put({ key: old, value: '' }).catch(() => {});
+      }
+      await client.store.put({ key: PART_INDEX, value: JSON.stringify(idx) });
+    } catch {
+      // ignore: memory tier still works
+    }
+  })();
+}
+
+async function fetchArtNetwork(url: string): Promise<string | null> {
+  // Persistent tier before the network: a cold start reuses art it saw
+  // in a previous session without touching the Bluetooth link at all.
+  const saved = await persistRead(PART_PREFIX + hashUrl(url));
+  if (saved) {
+    try {
+      const obj = URL.createObjectURL(new Blob([b64ToBytes(saved)], { type: 'image/jpeg' }));
+      rememberArt(url, obj);
+      return obj;
+    } catch {
+      // corrupt entry: fall through to the network
+    }
+  }
+  const res = await getClient().net.fetch({
+    request: { url, method: 'GET', headers: [], body: null, timeoutMs: 15000, redirect: 'follow' },
+  });
+  if (!res.ok) return null;
+  const r = res.response.response as { status: number; body?: Uint8Array };
+  if (r.status >= 400 || !r.body?.length) return null;
+  const srcBytes = r.body as Uint8Array<ArrayBufferLike>;
+  const bytes = new Uint8Array(srcBytes.length); // copy: BlobPart needs Uint8Array<ArrayBuffer>
+  bytes.set(srcBytes);
+  const obj = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+  rememberArt(url, obj);
+  persistWriteArt(url, bytes);
+  return obj;
+}
+
+async function loadArt(url: string, priority: 'front' | 'back' = 'front'): Promise<string | null> {
   const hit = artObjects.get(url);
   if (hit) {
-    artObjects.delete(url);
-    artObjects.set(url, hit); // refresh LRU order
+    rememberArt(url, hit); // refresh LRU order
     return hit;
   }
   const inflight = artInflight.get(url);
   if (inflight) return inflight;
-  // Gate every daemon fetch behind a small concurrency semaphore. Without it,
-  // opening the library fires one fetch per tile (hundreds at once) and the
-  // burst has been observed knocking the Bluetooth link over. Demand loads
-  // (gen -1) are never skipped; see warmArt for cancellable prefetch.
-  // Demand loads jump to the FRONT of the queue: something on screen now
-  // (the Now Playing hero, a freshly mounted tile) beats prefetching what
-  // might scroll into view later.
-  const p = new Promise<string | null>(resolve => {
-    artQueue.unshift({ url, gen: -1, resolve });
-    pumpArt();
+  // Demand loads jump to the FRONT of the net gate: something on screen now
+  // (the Now Playing hero, a freshly mounted tile) beats background JSON.
+  const p = gatedNet(() => fetchArtNetwork(url), priority).finally(() => {
+    artInflight.delete(url);
   });
   artInflight.set(url, p);
   return p;
-}
-
-const ART_CONCURRENCY = 4;
-let artActive = 0;
-// gen: prefetch generation at enqueue time. Demand loads use gen -1 (never
-// stale); prefetches carry the warmArt generation and are skipped if a newer
-// batch cancelled them before their slot came up.
-const artQueue: { url: string; gen: number; resolve: (v: string | null) => void }[] = [];
-
-function pumpArt(): void {
-  while (artActive < ART_CONCURRENCY && artQueue.length) {
-    const next = artQueue.shift()!;
-    if (next.gen >= 0 && next.gen !== warmGen) {
-      // stale prefetch: abandoned before it ever hit the network.
-      artInflight.delete(next.url);
-      next.resolve(null);
-      continue;
-    }
-    artActive++;
-    void (async (): Promise<void> => {
-      let result: string | null = null;
-      try {
-        const res = await getClient().net.fetch({
-          request: { url: next.url, method: 'GET', headers: [], body: null, timeoutMs: 15000, redirect: 'follow' },
-        });
-        if (res.ok) {
-          const r = res.response.response as { status: number; body?: Uint8Array };
-          if (r.status < 400 && r.body?.length) {
-            const bytes = new Uint8Array(r.body); // copy: BlobPart needs Uint8Array<ArrayBuffer>
-            const obj = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
-            while (artObjects.size >= ART_CACHE_MAX) evictOldestArt();
-            artObjects.set(next.url, obj);
-            result = obj;
-          }
-        }
-      } catch {
-        // failed art just leaves the tile placeholder
-      } finally {
-        artActive--;
-        artInflight.delete(next.url);
-        next.resolve(result);
-        pumpArt();
-      }
-    })();
-  }
 }
 
 // Prefetch generation: bumped to abandon a prefetch batch (e.g. the user
@@ -115,12 +163,12 @@ export function warmArt(srcs: (string | null | undefined)[], limit = 48): void {
   let n = 0;
   for (const s of srcs) {
     if (n >= limit) break;
+    if (gen !== warmGen) break; // superseded mid-batch: stop enqueueing
     if (s && !artObjects.has(s) && !artInflight.has(s)) {
       n++;
-      const p = new Promise<string | null>(resolve => {
-        artQueue.push({ url: s, gen, resolve });
-        pumpArt();
-      });
+      // Prefetch rides the BACK of the net gate; cancelWarmArt() bumps the
+      // generation so a newer batch supersedes this one.
+      const p = loadArt(s, 'back');
       artInflight.set(s, p);
       // Fire-and-forget: a Tile that mounts later picks the result up from
       // artInflight/artObjects. A skipped-stale prefetch resolves null and a
@@ -258,7 +306,8 @@ const PATHS: Record<string, string> = {
   repeatOne: 'M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-6h-2v4h-2v-6h4v2z',
   search: 'M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z',
   home: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-  library: 'M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z',
+  library:
+    'M8.5,11H5.563a2.5,2.5,0,0,1-2.5-2.5V5.564a2.5,2.5,0,0,1,2.5-2.5H8.5a2.5,2.5,0,0,1,2.5,2.5V8.5A2.5,2.5,0,0,1,8.5,11ZM5.563,4.064a1.5,1.5,0,0,0-1.5,1.5V8.5a1.5,1.5,0,0,0,1.5,1.5H8.5A1.5,1.5,0,0,0,10,8.5V5.564a1.5,1.5,0,0,0-1.5-1.5Z M18.436,11H15.5A2.5,2.5,0,0,1,13,8.5V5.564a2.5,2.5,0,0,1,2.5-2.5h2.934a2.5,2.5,0,0,1,2.5,2.5V8.5A2.5,2.5,0,0,1,18.436,11ZM15.5,4.064a1.5,1.5,0,0,0-1.5,1.5V8.5A1.5,1.5,0,0,0,15.5,10h2.934a1.5,1.5,0,0,0,1.5-1.5V5.564a1.5,1.5,0,0,0-1.5-1.5Z M8.5,20.936H5.564a2.5,2.5,0,0,1-2.5-2.5V15.5a2.5,2.5,0,0,1,2.5-2.5H8.5A2.5,2.5,0,0,1,11,15.5v2.936A2.5,2.5,0,0,1,8.5,20.936ZM5.564,14a1.5,1.5,0,0,0-1.5,1.5v2.936a1.5,1.5,0,0,0,1.5,1.5H8.5a1.5,1.5,0,0,0,1.5-1.5V15.5A1.5,1.5,0,0,0,8.5,14Z M18.436,20.936H15.5a2.5,2.5,0,0,1-2.5-2.5V15.5A2.5,2.5,0,0,1,15.5,13h2.934a2.5,2.5,0,0,1,2.5,2.5v2.936A2.5,2.5,0,0,1,18.436,20.936ZM15.5,14A1.5,1.5,0,0,0,14,15.5v2.936a1.5,1.5,0,0,0,1.5,1.5h2.934a1.5,1.5,0,0,0,1.5-1.5V15.5a1.5,1.5,0,0,0-1.5-1.5Z',
   queue: 'M3 6h12v2H3zm0 4h12v2H3zm0 4h8v2H3zM16 9l6 3-6 3z',
   plus: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
   x: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
@@ -268,6 +317,8 @@ const PATHS: Record<string, string> = {
   volDown: 'M3 9v6h4l5 5V4L7 9H3z',
   mute: 'M16.5 12A4.5 4.5 0 0 0 14 8v2.18l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z',
   note: 'M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z',
+  lyrics:
+    'M20.437,4.063H3.563a.5.5,0,1,1,0-1H20.437a.5.5,0,1,1,0,1Z M16.5,8.5h-9a.5.5,0,0,1,0-1h9a.5.5,0,0,1,0,1Z M16.5,16.5h-9a.5.5,0,1,1,0-1h9a.5.5,0,1,1,0,1Z M20.437,12.5H3.563a.5.5,0,0,1,0-1H20.437a.5.5,0,0,1,0,1Z M20.437,20.937H3.563a.5.5,0,0,1,0-1H20.437a.5.5,0,0,1,0,1Z',
   mix: 'M3 5h2v14H3zm5 0h2v14H5zm4 0h2v9H9zm5 0h2v14h-2zm4 0h2v5h-2z',
   check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
   clock: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 10.59l-4.24 4.25-1.42-1.42L11 11.76V6h1v6.59z',

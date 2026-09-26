@@ -276,7 +276,7 @@ function InfoPanel({
                   tint={lyricsVisible ? '#34d399' : undefined}
                   className={lyricsVisible ? '' : 'opacity-40'}
                 >
-                  <Icon name="note" size={24} />
+                  <Icon name="lyrics" size={24} />
                 </Ghost>
               ) : (
                 // Old servers (< 10.9) hide the lyrics toggle entirely; keep a
@@ -400,7 +400,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   // Hero at 600px: the panel shows ~440px, so 800 was pure extra Bluetooth
   // bytes. The 200px art is already fetched for the backdrop/tint and renders
   // instantly as a progressive placeholder until the hero arrives.
-  const { url: heroArt } = useCachedArt(t ? (art?.trackArt(t, 600) ?? null) : null);
+  const { url: heroArt } = useCachedArt(t ? (art?.trackArt(t, 512) ?? null) : null);
   const { url: bgArt } = useCachedArt(t ? (art?.trackArt(t, 200) ?? null) : null);
 
   // Accent color pulled off the cover for the info panel wash + the
@@ -501,7 +501,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   ) : heroArt || bgArt ? (
     <div className="relative h-full w-full overflow-hidden">
       {/* Progressive hero: the fast 200px art shows immediately (soft),
-          the 600px hero paints over it the moment it arrives. */}
+          the 512px hero paints over it the moment it arrives. */}
       {bgArt && !heroArt ? (
         <img
           src={bgArt}

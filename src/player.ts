@@ -47,10 +47,15 @@ const END_POLL_WINDOW_MS = 10_000;
 // Remote mode: server session polls. Position only needs to be
 // fresh enough for the progress bar; commands are instant.
 // Remote-mode poll: a steady drip of tiny /Sessions reads keeps Finch in
-// sync with Finamp. Kept slow (10s) and paused entirely while the phone
-// link is down — polling into a dead link is exactly the kind of traffic
-// that keeps a struggling Bluetooth connection from recovering.
-const REMOTE_POLL_MS = 10000;
+// The remote poll keeps our mirror of Finamp's state honest and doubles as
+// the link-drop detector (3 consecutive transport failures = link down).
+// Adaptive cadence: 15s while music is playing (progress + track changes),
+// 60s when idle — polling into a quiet or struggling Bluetooth link is
+// exactly the kind of background traffic that keeps it from recovering.
+// The poll is also paused entirely while the phone link is down.
+// 10s was the fastest network poll of any Bridgething app (next: 5 min).
+const REMOTE_POLL_PLAYING_MS = 15000;
+const REMOTE_POLL_IDLE_MS = 60000;
 // After we send a remote command our optimistic local state wins over poll
 // data for this long, so the UI doesn't flicker back mid-flight.
 const REMOTE_CMD_SETTLE_MS = 2000;
@@ -137,6 +142,20 @@ export class PlaybackEngine {
   remoteClient = '';
   remoteDevice = '';
   private remotePollTimer: number | null = null;
+  private lastArmedPlaying: boolean | null = null;
+
+  // (Re)start the remote poll at the cadence matching the current play
+  // state. Called on attach, reconnect, play/pause flips, and whenever the
+  // poll itself observes a state change.
+  private armRemotePoll(): void {
+    if (this.remotePollTimer !== null) window.clearInterval(this.remotePollTimer);
+    const playing = this.intentPlaying;
+    this.lastArmedPlaying = playing;
+    this.remotePollTimer = window.setInterval(
+      () => void this.pollRemote(),
+      playing ? REMOTE_POLL_PLAYING_MS : REMOTE_POLL_IDLE_MS,
+    );
+  }
   private remoteGen = 0;
   private lastRemoteCmdAt = 0;
   // True while the phone Bluetooth link is known down: remote mode is kept
@@ -411,6 +430,7 @@ export class PlaybackEngine {
       this.intentPlaying = !pausing;
       this.error = null;
       this.emit();
+      this.armRemotePoll(); // flip to the matching poll cadence immediately
       this.remoteCommand(pausing ? 'Pause' : 'Unpause');
       return;
     }
@@ -805,8 +825,7 @@ export class PlaybackEngine {
     await this.pollRemote();
     if (gen !== this.remoteGen) return;
     this.loading = false;
-    if (this.remotePollTimer !== null) window.clearInterval(this.remotePollTimer);
-    this.remotePollTimer = window.setInterval(() => void this.pollRemote(), REMOTE_POLL_MS);
+    this.armRemotePoll();
     this.emit();
     try {
       await getClient().store.put({
@@ -936,6 +955,11 @@ export class PlaybackEngine {
       if (st.track) this.durationMs = st.track.durationMs;
     }
     this.intentPlaying = !st.paused && !!st.track;
+    // The play state flipped under us (e.g. paused on the phone): switch
+    // the poll to the matching cadence instead of waiting out the old one.
+    if (this.lastArmedPlaying !== null && this.lastArmedPlaying !== this.intentPlaying) {
+      this.armRemotePoll();
+    }
     this.emit();
   }
 
@@ -1021,7 +1045,7 @@ export class PlaybackEngine {
         // Resume the poll on reconnect (it was paused above, or the poll
         // backstop below may have left it running).
         if (this.remotePollTimer === null) {
-          this.remotePollTimer = window.setInterval(() => void this.pollRemote(), REMOTE_POLL_MS);
+          this.armRemotePoll();
         }
         this.emit();
         void this.pollRemote();

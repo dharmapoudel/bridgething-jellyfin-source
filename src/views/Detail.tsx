@@ -88,7 +88,7 @@ export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & 
     }
   };
 
-  const headerArt = tracks?.[0] && params.kind !== 'album' ? (art?.trackArt(tracks[0], 300) ?? null) : null;
+  const headerArt = tracks?.[0] && params.kind !== 'album' ? (art?.trackArt(tracks[0], 256) ?? null) : null;
 
   return (
     <div className="flex h-full flex-col">

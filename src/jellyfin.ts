@@ -9,6 +9,7 @@
 // and image URLs, where no headers can be sent).
 
 import { getClient } from './client';
+import { gatedNet } from './netgate';
 
 export const FINCH_VERSION = '0.1.11';
 
@@ -280,6 +281,9 @@ export class JellyfinClient {
     path: string,
     params: Record<string, string | number | boolean> = {},
     body?: unknown,
+    // 'front': user-initiated commands (pause/next/seek/play) jump the net
+    // gate queue so a tap never waits behind artwork fetches.
+    priority: 'front' | 'back' = 'back',
   ): Promise<T> {
     const client = getClient();
     // Auth rides two ways: the modern `Authorization` header with the token
@@ -297,16 +301,22 @@ export class JellyfinClient {
       },
     ];
     if (body) headers.push({ name: 'Content-Type', value: 'application/json' });
-    const res = await client.net.fetch({
-      request: {
-        url: this.url(path, params),
-        method,
-        headers,
-        body: body ? enc.encode(JSON.stringify(body)) : null,
-        timeoutMs: FETCH_TIMEOUT_MS,
-        redirect: 'follow',
-      },
-    });
+    // Every tunneled request draws from the shared 3-slot gate (netgate):
+    // the phone buffers each reply fully, so unbounded concurrency wedges it.
+    const res = await gatedNet(
+      () =>
+        client.net.fetch({
+          request: {
+            url: this.url(path, params),
+            method,
+            headers,
+            body: body ? enc.encode(JSON.stringify(body)) : null,
+            timeoutMs: FETCH_TIMEOUT_MS,
+            redirect: 'follow',
+          },
+        }),
+      priority,
+    );
     if (!res.ok) {
       const e = res.error;
       const kind = 'error' in e ? (e.error.type === 'requestFailed' ? e.error.data.reason : e.error.type) : e.type;
@@ -524,8 +534,10 @@ export class JellyfinClient {
   }
 
   // Plain <img> needs no CORS, so artwork goes straight at the server.
+  // Tile art is 256px / q80: a tile renders at ~160px, so this is already
+  // oversampled — and every byte rides the Bluetooth link via net.fetch.
   imageUrl(itemId: string, width = 500): string {
-    return this.url(`/Items/${itemId}/Images/Primary`, { fillWidth: width, quality: 90 });
+    return this.url(`/Items/${itemId}/Images/Primary`, { fillWidth: width, quality: 80 });
   }
 
   // Artwork for a track: its own image, else its album's.
@@ -588,6 +600,7 @@ export class JellyfinClient {
       `/Sessions/${encodeURIComponent(sessionId)}/Playing/${encodeURIComponent(command)}`,
       {},
       body,
+      'front',
     );
   }
 
@@ -602,7 +615,7 @@ export class JellyfinClient {
       itemIds: itemIds.join(','),
     };
     if (startIndex > 0) params.startIndex = startIndex;
-    await this.request<void>('POST', `/Sessions/${encodeURIComponent(sessionId)}/Playing`, params);
+    await this.request<void>('POST', `/Sessions/${encodeURIComponent(sessionId)}/Playing`, params, undefined, 'front');
   }
 
   // Resume detection: fetch one library item as a Track.

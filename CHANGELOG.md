@@ -1,3 +1,9 @@
+## 1.0.10
+- Bluetooth diet: ALL phone-tunnel traffic (JSON, artwork, remote commands) now flows through one shared 3-slot gate, so the phone is never asked to juggle ~9 concurrent fully-buffered fetches at once — the thing that was wedging the companion and stalling the link on app load. User taps (pause/next/seek/play) jump the queue.
+- Artwork goes on a diet: tiles 300px/q90 -> 256px/q80, hero 600px -> 512px (~40% fewer bytes per image), and art is now cached persistently in the daemon store (48 most recent) — a cold start reuses art it already saw without downloading a byte.
+- Remote poll is adaptive: 15s while playing, 60s when idle (was a flat 10s — the fastest network poll of any Bridgething app). Link-drop detection still works (3 consecutive failures), just on the slower cadence when nothing is playing.
+- Lyrics toggle uses the new text-lines icon; the Library tab uses the new 2x2 grid icon.
+
 ## 1.0.2
 - Remote-mode play fixes: (1) tapping a song in remote mode used to leave the play/pause button spinning forever — the poll only cleared the loading spinner when the track *changed*, so a successful play of the requested track never cleared it. The spinner now clears whenever the session reports a live track. (2) when asking the remote player to start songs fails, Finch now shows the server's own error (status/reason) under the friendly message instead of just "Could not reach the player.", so a failure diagnoses itself.
 
