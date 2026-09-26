@@ -31,7 +31,7 @@ const TAB_X = ['12.5%', '37.5%', '62.5%']; // o-music PRESET_AT, 4th (87.5%) unu
 function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
   const activeIdx = view.name === 'home' ? 0 : view.name === 'queue' ? 2 : 1;
   return (
-    <div className="relative h-[30px] shrink-0 border-b border-white/10 transition-all duration-300 active:h-[60px]">
+    <div className="relative z-10 h-[30px] shrink-0 border-b border-white/10 transition-all duration-300 active:h-[60px]">
       {NAV_ITEMS.map((item, i) => {
         const active = i === activeIdx;
         return (

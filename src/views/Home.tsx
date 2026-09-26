@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { albumActions, playlistActions, trackActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
 import {
+  AmbientArt,
   AuthError,
   Empty,
   Rise,
@@ -10,6 +11,7 @@ import {
   Tile,
   TrackRow,
   useArt,
+  useArtAccent,
   usePlayer,
   type MenuAction,
 } from '../components';
@@ -118,8 +120,19 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
 
   const menuFor = (t: Track): MenuAction[] => trackActions(t, jf, nav);
 
+  // Ambient backdrop: the now-playing track's art when something is active,
+  // otherwise the most recent track's. The accent glow is sampled from it.
+  // Fixed so it paints behind the transparent top tab strip as well.
+  const ambientTrack =
+    (nowActive ? recent.data?.find(t => t.id === nowId) : null) ?? recent.data?.[0] ?? null;
+  const ambientSrc = ambientTrack && art ? (art.trackArt(ambientTrack, 256) ?? null) : null;
+  const accent = useArtAccent(ambientSrc);
+
+  const anyError = recent.error || added.error || favs.error || playlists.error;
+
   return (
     <div className="relative h-full overflow-y-auto">
+      <AmbientArt src={ambientSrc} accent={accent} height={340} fixed />
       <div className="relative py-5">
         {anyError ? (
           isAuthError(recent.rawError) ||

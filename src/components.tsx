@@ -549,7 +549,7 @@ export function Tile({
   return (
     <div className="relative shrink-0" style={{ width: size }}>
       <button type="button" onClick={onClick} className="block w-full text-left active:opacity-80">
-        <div className={active ? 'rounded-3xl ring-2 ring-leaf ring-offset-2 ring-offset-black' : undefined}>
+        <div className={active ? 'rounded-3xl ring-2 ring-inset ring-leaf' : undefined}>
           <Artwork src={art} size={size} rounded="rounded-3xl" label={title} />
         </div>
         <div className={`mt-2 truncate text-lg leading-tight font-medium ${active ? 'text-leaf' : ''}`}>{title}</div>
@@ -831,7 +831,7 @@ export function GridCard({
 }) {
   return (
     <div className="relative cursor-pointer" onClick={onClick}>
-      <div className={active ? 'rounded-3xl ring-2 ring-leaf ring-offset-2 ring-offset-black' : undefined}>
+      <div className={active ? 'rounded-3xl ring-2 ring-inset ring-leaf' : undefined}>
         <Artwork src={art} size={320} rounded="rounded-3xl" label={title} fluid />
       </div>
       <div className={`mt-2 truncate px-1 text-lg leading-tight font-semibold ${active ? 'text-leaf' : ''}`}>
@@ -968,16 +968,21 @@ export function AmbientArt({
   src,
   accent,
   height = 320,
+  fixed = false,
 }: {
   src: string | null;
   accent?: string | null;
   height?: number;
+  // fixed pins the backdrop to the viewport so it paints behind the top tab
+  // strip too (the strip is transparent); absolute stays inside the view's
+  // own scroll container, e.g. the Detail header.
+  fixed?: boolean;
 }) {
   const { url } = useCachedArt(src);
   if (!url) return null;
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden"
+      className={`pointer-events-none ${fixed ? 'fixed' : 'absolute'} inset-x-0 top-0 overflow-hidden`}
       style={{ height }}
       aria-hidden
     >
