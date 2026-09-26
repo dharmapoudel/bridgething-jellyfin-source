@@ -240,10 +240,13 @@ function InfoPanel({
           </div>
 
           {/* o-music transport: bare glyphs, no circles; play/pause takes the
-              cover's accent color, skips stay off-white. Lyrics sits left of
-              previous, heart right of next; inactive icons are translucent,
-              the active state is a solid green icon. */}
-          <div className={`flex shrink-0 items-center justify-center ${small ? 'gap-12' : 'gap-10'}`}>
+              cover's accent color, skips stay off-white. Lyrics and heart sit
+              at the row's extremes, their icons lined up exactly with the seek
+              bar's ends (ml-3/mr-3 flips the Ghost tap-target margin on the
+              outer side so the 24px icon starts at the bar's edge);
+              prev/play/next stay centered between them, untouched.
+              Inactive icons are translucent, the active state is solid green. */}
+          <div className="flex shrink-0 items-center justify-between">
               {lyricsSupported !== false ? (
                 <Ghost
                   label={
@@ -256,11 +259,12 @@ function InfoPanel({
                   disabled={!hasLyrics}
                   onClick={onToggleLyrics}
                   tint={lyricsVisible ? '#34d399' : undefined}
-                  className={lyricsVisible ? '' : 'opacity-40'}
+                  className={`${lyricsVisible ? '' : 'opacity-40'} ml-3`}
                 >
                   <Icon name="note" size={24} />
                 </Ghost>
               ) : null}
+              <div className={`flex items-center ${small ? 'gap-12' : 'gap-10'}`}>
               <Ghost label="Previous" onClick={() => void player.prev()}>
                 <TransportGlyph
                   name="skip"
@@ -289,11 +293,12 @@ function InfoPanel({
               <Ghost label="Next" onClick={() => void player.next()}>
                 <TransportGlyph name="skip" className={small ? 'h-9 w-9' : 'h-8 w-8'} />
               </Ghost>
+              </div>
               <Ghost
                 label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                 onClick={onToggleFav}
                 tint={isFavorite ? '#34d399' : undefined}
-                className={isFavorite ? '' : 'opacity-40'}
+                className={`${isFavorite ? '' : 'opacity-40'} mr-3`}
               >
                 <Icon name={isFavorite ? 'heartFill' : 'heart'} size={24} />
               </Ghost>

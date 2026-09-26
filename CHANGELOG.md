@@ -220,3 +220,6 @@
 
 ## 0.1.48
 - Now Playing back to the 0.1.44 layout, with one change: the lyrics icon sits left of previous and the heart icon right of next in the transport row. Nothing else moved — seek bar, titles, and row positions are exactly as they were.
+
+## 0.1.49
+- Now Playing: the lyrics and heart buttons are pinned to the transport row's extremes, their icons lined up exactly with the seek bar's start and end. Previous/play/next stay centered between them, untouched.
