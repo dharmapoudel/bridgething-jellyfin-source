@@ -320,9 +320,12 @@ export class PlaybackEngine {
       try {
         await new RemoteControl(this.jf).playNow(this.remoteSessionId!, list.map(t => t.id), idx);
         this.lastRemoteCmdAt = Date.now();
-      } catch {
+      } catch (e) {
         this.loading = false;
         this.error = 'Could not reach the player.';
+        // Surface the server's own words (status/reason) under the friendly
+        // message — a 403/404/500 here diagnoses itself.
+        this.errorDetail = e instanceof Error ? e.message : null;
       }
       this.emit();
       this.pollRemoteSoon();
@@ -646,6 +649,7 @@ export class PlaybackEngine {
       this.positionAt = Date.now();
       this.loading = true;
       this.error = null;
+      this.errorDetail = null;
       this.emit();
       try {
         await new RemoteControl(this.jf).playNow(
@@ -654,9 +658,10 @@ export class PlaybackEngine {
           i,
         );
         this.lastRemoteCmdAt = Date.now();
-      } catch {
+      } catch (e) {
         this.loading = false;
         this.error = 'Could not reach the player.';
+        this.errorDetail = e instanceof Error ? e.message : null;
       }
       this.emit();
       this.pollRemoteSoon();
@@ -795,6 +800,11 @@ export class PlaybackEngine {
     }
     this.remoteClient = st.client || this.remoteClient;
     this.remoteDevice = st.deviceName || this.remoteDevice;
+    // The session is alive and has a track: any in-flight remote play has
+    // landed (or been answered), so the spinner can go — the track-change
+    // branch below handles the new-track case, this covers the same-track
+    // case (e.g. right after a remote playQueue) that used to spin forever.
+    if (st.track) this.loading = false;
     const cur = this.current();
     if (st.track && (!cur || cur.id !== st.track.id)) {
       // Track changed (the client advanced, or the user skipped on the phone).
