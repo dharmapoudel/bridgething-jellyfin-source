@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions, trackActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
-import { AuthError, Empty, Spinner, Tile, TrackRow, useArt, warmArt, type MenuAction } from '../components';
+import { AuthError, Empty, Spinner, Tile, TrackRow, useArt, usePlayer, warmArt, type MenuAction } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Playlist, type Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
@@ -62,6 +62,14 @@ function Rail({ title, onSeeAll, children }: { title: string; onSeeAll?: () => v
 
 export default function Home({ jf, nav, openMenu }: ViewProps) {
   const art = useArt();
+  usePlayer();
+  // The track Finch is actually playing right now (adopted on app start
+  // when the phone kept playing across a restart): highlight its tile in
+  // Continue listening, and tapping it opens Now Playing without
+  // restarting it from scratch.
+  const nowId = player.current()?.id ?? null;
+  const nowActive =
+    nowId !== null && !player.external && !player.error && (player.intentPlaying || player.loading);
 
   const recent = useLoad<Track[]>('home:recent', () => jf.recentlyPlayedTracks(12));
   const added = useLoad<Album[]>('home:added', () => jf.recentlyAddedAlbums(12));
@@ -98,19 +106,25 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
 
         {recent.data ? (
           <Rail title="Continue listening">
-            {recent.data.map(t => (
-              <Tile
-                key={t.id}
-                title={t.name}
-                subtitle={t.artist}
-                art={art?.trackArt(t) ?? null}
-                onClick={() => {
-                  nav({ name: 'nowplaying' });
-                  void player.playQueue(recent.data!, recent.data!.indexOf(t));
-                }}
-                onMenu={() => openMenu(t.name, menuFor(t))}
-              />
-            ))}
+            {recent.data.map(t => {
+              const isCurrent = nowActive && t.id === nowId;
+              return (
+                <Tile
+                  key={t.id}
+                  title={t.name}
+                  subtitle={t.artist}
+                  art={art?.trackArt(t) ?? null}
+                  active={isCurrent}
+                  onClick={() => {
+                    nav({ name: 'nowplaying' });
+                    // Tapping the currently-playing tile just opens Now
+                    // Playing; every other tile starts it from scratch.
+                    if (!isCurrent) void player.playQueue(recent.data!, recent.data!.indexOf(t));
+                  }}
+                  onMenu={() => openMenu(t.name, menuFor(t))}
+                />
+              );
+            })}
           </Rail>
         ) : (
           !recent.error && <Spinner label="Loading your music…" />

@@ -478,18 +478,22 @@ export function Tile({
   art,
   onClick,
   onMenu,
+  active,
 }: {
   title: string;
   subtitle?: string;
   art: string | null;
   onClick: () => void;
   onMenu?: () => void;
+  active?: boolean;
 }) {
   return (
     <div className="relative w-40 shrink-0">
       <button type="button" onClick={onClick} className="block w-full text-left active:opacity-80">
-        <Artwork src={art} size={160} label={title} />
-        <div className="mt-2 truncate text-lg leading-tight font-medium">{title}</div>
+        <div className={active ? 'rounded-xl ring-2 ring-leaf ring-offset-2 ring-offset-black' : undefined}>
+          <Artwork src={art} size={160} label={title} />
+        </div>
+        <div className={`mt-2 truncate text-lg leading-tight font-medium ${active ? 'text-leaf' : ''}`}>{title}</div>
         {subtitle ? <div className="truncate text-base leading-tight text-white/50">{subtitle}</div> : null}
       </button>
       {onMenu ? (

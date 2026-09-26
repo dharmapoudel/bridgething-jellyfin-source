@@ -198,3 +198,7 @@
 
 ## 0.1.41
 - Playback failures now show the phone's own reason under the message. The seek rejection comes from the iPhone companion side, and Finch was dropping the reason it sends — surfacing it so the next failure says exactly what the phone choked on.
+
+## 0.1.42
+- Auto-advance the queue when the phone doesn't report "stopped" at track end: a natural end that surfaces as "paused at the duration" now advances (a real user pause still never does — intent distinguishes them), plus a 5s watchdog backstop for companions that sit at the duration cap still claiming "playing" (gated on the phone's last reported position so buffering stalls can't trigger it; link-down ends stay owned by the reconnect heal).
+- Continue listening: the currently-playing track's tile is highlighted (leaf ring + title), and tapping it opens Now Playing without restarting it from scratch. Every other tile still plays from the start.

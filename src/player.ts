@@ -33,6 +33,13 @@ const RESTART_GAP_MS = 10_000; // phone this far behind us => it restarted
 // "Rate limit exceeded". The local clock updates instantly; only the send
 // is paced, trailing-edge, so a flurry of seeks collapses into one.
 const SEEK_PACE_MS = 800;
+// End-of-track detection. The phone does not always report "stopped" when
+// a track ends — some companions surface it as "paused at the duration",
+// others keep saying "playing" while parked at the cap. END_EPS_MS is how
+// close to the duration a "paused" snapshot must be to count as the natural
+// end; the watchdog below re-checks every END_WATCH_MS as a backstop.
+const END_EPS_MS = 2000;
+const END_WATCH_MS = 5000;
 
 export interface PersistedQueue {
   tracks: Track[];
@@ -76,6 +83,7 @@ export class PlaybackEngine {
   private lastPlayAt = 0;
   private sessionId = '';
   private progressTimer: number | null = null;
+  private endWatchTimer: number | null = null;
   private lastPauseAt = 0;
   private lastSeekSentAt = 0;
   private pendingSeekMs: number | null = null;
@@ -184,12 +192,32 @@ export class PlaybackEngine {
         void this.jf.reportProgress(t.id, this.sessionId, this.positionNow(), false);
       }
     }, PROGRESS_REPORT_MS);
+    // End-of-track backstop: if the phone never reports stopped/paused at
+    // the end and just sits at the duration cap still claiming "playing",
+    // the queue would strand. Advance when our clock is parked at the cap
+    // AND the phone's last word also had it at the cap (so a buffering
+    // stall mid-track can never trigger it). The link-down case is owned
+    // by the reconnect heal, not this timer.
+    this.endWatchTimer = window.setInterval(() => {
+      const t = this.current();
+      if (!t || !this.intentPlaying || this.awaitingStart || this.external) return;
+      if (this.gatewayUp === false) return;
+      const durMs = t.durationMs;
+      if (!(durMs > 0)) return;
+      if (this.positionNow() >= durMs && this.snapPositionMs >= durMs - END_EPS_MS) {
+        void this.next(true);
+      }
+    }, END_WATCH_MS);
   }
 
   private clearProgressTimer(): void {
     if (this.progressTimer !== null) {
       window.clearInterval(this.progressTimer);
       this.progressTimer = null;
+    }
+    if (this.endWatchTimer !== null) {
+      window.clearInterval(this.endWatchTimer);
+      this.endWatchTimer = null;
     }
   }
 
@@ -535,9 +563,23 @@ export class PlaybackEngine {
         this.positionMs = pb.positionMs;
         this.positionAt = Date.now();
       }
+      const wasIntent = this.intentPlaying && !this.awaitingStart;
       if (!this.awaitingStart) this.intentPlaying = false;
       this.loading = false;
+      // Natural track end sometimes surfaces as "paused at the duration"
+      // instead of "stopped" (companion-dependent). Advance the queue
+      // instead of stranding. A real user pause always clears intent first
+      // (toggle), so wasIntent tells the two apart; the snapshot must also
+      // be for our current track, so a stale one can't double-advance.
+      const durMs = this.current()?.durationMs ?? 0;
+      const ended =
+        wasIntent &&
+        !pauseGrace &&
+        durMs > 0 &&
+        pb.positionMs >= durMs - END_EPS_MS &&
+        this.snapTrackId === this.current()?.id;
       this.emit();
+      if (ended) void this.next(true);
     } else {
       // stopped: either we stopped it (intent already false) or the track
       // ended on its own -> advance. ignore the transient stopped right
