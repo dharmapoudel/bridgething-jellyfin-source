@@ -1,4 +1,5 @@
-## 0.1.54
+## 1.0.0
+- finch-remote starts here: the repo is renamed from bridgething-jellyfin-source to finch-remote and versioning restarts at 1.0.0. This release is the "Play on" remote mode (previously built as 0.1.54): Finch remote-controls another Jellyfin client on your phone — Finamp, Jellyfin Web, Swiftfin, whatever was playing last — instead of playing through the companion app.
 - "Play on" remote mode: Finch can now remote-control another Jellyfin client on your phone — Finamp, Jellyfin Web, Swiftfin, whatever was playing last — instead of playing through the companion app. Pick it from the device pill in Now Playing (or the "Play on phone" button when nothing is playing): transport, seek and queue all drive the other player's own session through the Jellyfin server, while audio, lock-screen info and offline downloads stay in that app. The remote track is mirrored into Now Playing and the queue view; a server poll every 3s keeps the clock honest. Sessions are listed most recently active first, and on startup Finch picks up the session that was playing last. If the session disappears, Finch falls back to the companion path. The selection persists across app restarts.
 - Remote-mode notes: shuffle/repeat and queue editing belong to the remote client while remote — Finch only mirrors. Knob volume still adjusts the phone's system volume.
 
