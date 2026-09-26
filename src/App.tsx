@@ -18,9 +18,12 @@ const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | '
   { view: { name: 'queue' }, icon: 'queue', label: 'Queue' },
 ];
 
-// o-music-style top tab strip: each tab is a line with its label below it, like
-// o-music's COVER label. The bottom nav bar is gone to reclaim vertical space.
-// Tapping a tab animates its line pushing down to reveal the tab's icon.
+// o-music-style top tab strip: each tab is a 2px line (touching the very top
+// of the screen) with its label below it, like o-music's COVER label. The
+// bottom nav bar is gone to reclaim vertical space. The tab's icon is revealed
+// only while the button is pressed: it drops down under the line, then slides
+// back up and hides when the press is lifted. The active tab is shown by its
+// leaf-green line and bright label.
 function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
   const activeIdx = view.name === 'home' ? 0 : view.name === 'queue' ? 2 : 1;
   return (
@@ -33,31 +36,23 @@ function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
             type="button"
             aria-pressed={active}
             onClick={() => onNav(item.view)}
-            className="flex flex-1 flex-col items-center justify-end px-2 pt-2.5 pb-2 active:bg-white/5"
+            className="group flex flex-1 flex-col items-center justify-start px-2 pb-2 active:bg-white/5"
           >
-            {/* the icon above the line: hidden by default, revealed with a
-                push-down animation when the tab is pressed */}
+            {/* the line, touching the very top of the screen */}
             <div
-              className={`grid transition-all duration-300 ease-out ${
-                active ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+              className={`h-[2px] rounded-full transition-all duration-300 ${
+                active ? 'w-12 bg-leaf' : 'w-8 bg-white/20'
               }`}
-            >
+            />
+            {/* the icon: revealed only while the button is pressed, slides
+                back up and hides when the press is lifted */}
+            <div className="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-out group-active:mt-1.5 group-active:grid-rows-[1fr] group-active:opacity-100">
               <div className="overflow-hidden">
-                <div
-                  className={`text-leaf transition-transform duration-300 ease-out ${
-                    active ? 'translate-y-0' : '-translate-y-3'
-                  }`}
-                >
+                <div className="-translate-y-3 text-leaf transition-transform duration-300 ease-out group-active:translate-y-0">
                   <Icon name={item.icon} size={24} />
                 </div>
               </div>
             </div>
-            {/* the line */}
-            <div
-              className={`h-[2px] rounded-full transition-all duration-300 ${
-                active ? 'mt-1.5 w-12 bg-leaf' : 'mt-0 w-8 bg-white/20'
-              }`}
-            />
             {/* the label, o-music COVER style */}
             <span
               className={`mt-1 text-xs tracking-[0.22em] uppercase transition-colors duration-300 ${
