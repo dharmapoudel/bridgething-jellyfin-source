@@ -28,20 +28,38 @@ const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | '
 // hides when the press is lifted. The active tab is shown by its leaf-green
 // line and bright label.
 const TAB_X = ['12.5%', '37.5%', '62.5%']; // o-music PRESET_AT, 4th (87.5%) unused for now
-function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
+function TopTabs({
+  view,
+  onNav,
+  pressedIdx,
+  setPressedIdx,
+}: {
+  view: View;
+  onNav: (v: View) => void;
+  pressedIdx: number | null;
+  setPressedIdx: (i: number | null) => void;
+}) {
   const activeIdx = view.name === 'home' ? 0 : view.name === 'queue' ? 2 : 1;
   return (
-    <div className="relative z-10 h-[30px] shrink-0 border-b border-white/10 transition-all duration-300 active:h-[60px]">
+    <div
+      className={`relative z-10 h-[30px] shrink-0 border-b border-white/10 transition-all duration-300 ${
+        pressedIdx !== null ? 'h-[60px]' : ''
+      }`}
+    >
       {NAV_ITEMS.map((item, i) => {
         const active = i === activeIdx;
+        const pressed = pressedIdx === i;
         return (
           <button
             key={item.label}
             type="button"
             aria-pressed={active}
             onClick={() => onNav(item.view)}
+            onPointerDown={() => setPressedIdx(i)}
+            onPointerUp={() => setPressedIdx(null)}
+            onPointerCancel={() => setPressedIdx(null)}
             style={{ left: TAB_X[i] }}
-            className="group absolute top-0 flex w-[22%] -translate-x-1/2 flex-col items-center px-2 pb-2 active:bg-white/5"
+            className="absolute top-0 flex w-[22%] -translate-x-1/2 flex-col items-center px-2 pb-2 active:bg-white/5"
           >
             {/* the line, touching the very top of the screen, centered
                 directly below its hardware preset button */}
@@ -50,11 +68,20 @@ function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
                 active ? 'w-12 bg-leaf' : 'w-8 bg-white/20'
               }`}
             />
-            {/* the icon: revealed only while the button is pressed, slides
-                back up and hides when the press is lifted */}
-            <div className="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-out group-active:mt-1.5 group-active:grid-rows-[1fr] group-active:opacity-100">
+            {/* the icon: revealed only while the button is pressed (touch or
+                hardware), pushing down above the line; slides back up and
+                hides when the press is lifted */}
+            <div
+              className={`grid transition-all duration-300 ease-out ${
+                pressed ? 'mt-1.5 grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+              }`}
+            >
               <div className="overflow-hidden">
-                <div className="-translate-y-3 text-leaf transition-transform duration-300 ease-out group-active:translate-y-0">
+                <div
+                  className={`text-leaf transition-transform duration-300 ease-out ${
+                    pressed ? 'translate-y-0' : '-translate-y-3'
+                  }`}
+                >
                   <Icon name={item.icon} size={24} />
                 </div>
               </div>
@@ -119,6 +146,31 @@ export default function App() {
   const [stack, setStack] = useState<View[]>([{ name: 'home' }]);
   const [queueOpen, setQueueOpen] = useState(false);
   const [daemonUp, setDaemonUp] = useState(true);
+  // which top tab is currently pressed (touch or hardware preset button).
+  // drives the icon push-down reveal; a hardware press never sets :active
+  // on the on-screen button, so this is state-driven instead of CSS-only.
+  const [pressedIdx, setPressedIdx] = useState<number | null>(null);
+  const pressClearRef = useRef<number | null>(null);
+  const clearPressed = useCallback(() => {
+    if (pressClearRef.current !== null) {
+      window.clearTimeout(pressClearRef.current);
+      pressClearRef.current = null;
+    }
+    setPressedIdx(null);
+  }, []);
+  const pressTab = useCallback(
+    (i: number, v: View) => {
+      setPressedIdx(i);
+      // safety: if the device never sends keyup, don't leave the icon stuck
+      if (pressClearRef.current !== null) window.clearTimeout(pressClearRef.current);
+      pressClearRef.current = window.setTimeout(() => {
+        pressClearRef.current = null;
+        setPressedIdx(null);
+      }, 1200);
+      nav(v);
+    },
+    [nav],
+  );
   const menu = useMenu();
   usePlayer();
 
@@ -293,10 +345,13 @@ export default function App() {
         if (v.name !== 'setup') nav({ name: 'home' });
         return;
       }
-      // preset shortcuts, ignored while typing in the on-screen keyboard views
+      // preset shortcuts, ignored while typing in the on-screen keyboard views.
+      // they also drive the tab's press-reveal animation, since a hardware
+      // press never gives the on-screen button a CSS :active.
       if (v.name === 'setup') return;
-      if (e.key === '1') nav({ name: 'home' });
-      else if (e.key === '2') nav({ name: 'library', tab: 'playlists' });
+      if (e.key === '1') pressTab(0, { name: 'home' });
+      else if (e.key === '2') pressTab(1, { name: 'library', tab: 'playlists' });
+      else if (e.key === '3') pressTab(2, { name: 'queue' });
       else if (e.key === '4') nav({ name: 'nowplaying' });
     };
     const onWheel = (e: WheelEvent): void => {
@@ -307,11 +362,18 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('wheel', onWheel, { passive: false });
+    // lifting a hardware preset button ends the tab press reveal; the
+    // timeout in pressTab covers devices that never send keyup
+    const onKeyUp = (e: KeyboardEvent): void => {
+      if (e.key === '1' || e.key === '2' || e.key === '3') clearPressed();
+    };
+    window.addEventListener('keyup', onKeyUp);
     return () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keyup', onKeyUp);
     };
-  }, [back, minimizeNowPlaying, nav, nudgeVolume]);
+  }, [back, minimizeNowPlaying, nav, nudgeVolume, pressTab, clearPressed]);
 
   const artResolver: ArtResolver | null = useMemo(
     () =>
@@ -367,7 +429,7 @@ export default function App() {
             Lost connection to the device. Reconnect to continue.
           </div>
         ) : null}
-        {showChrome ? <TopTabs view={view} onNav={nav} /> : null}
+        {showChrome ? <TopTabs view={view} onNav={nav} pressedIdx={pressedIdx} setPressedIdx={setPressedIdx} /> : null}
         <div className="relative min-h-0 flex-1">{renderView()}</div>
         {/* Queue bar on every screen while a song is playing; the mini player is gone. */}
         {current ? <QueueHandle onOpen={() => setQueueOpen(true)} /> : null}
