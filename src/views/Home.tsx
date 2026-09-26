@@ -133,7 +133,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
   return (
     <div className="relative h-full overflow-y-auto">
       <AmbientArt src={ambientSrc} accent={accent} height={340} fixed />
-      <div className="relative py-5">
+      <div className="relative pb-5 pt-2">
         {anyError ? (
           isAuthError(recent.rawError) ||
           isAuthError(added.rawError) ||
