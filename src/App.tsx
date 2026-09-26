@@ -35,28 +35,29 @@ function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
             onClick={() => onNav(item.view)}
             className="flex flex-1 flex-col items-center justify-end px-2 pt-2.5 pb-2 active:bg-white/5"
           >
-            {/* the line */}
-            <div
-              className={`h-[3px] rounded-full transition-all duration-300 ${
-                active ? 'w-12 bg-leaf' : 'w-8 bg-white/20'
-              }`}
-            />
-            {/* the icon: hidden by default, the line pushes down to reveal it */}
+            {/* the icon above the line: hidden by default, revealed with a
+                push-down animation when the tab is pressed */}
             <div
               className={`grid transition-all duration-300 ease-out ${
-                active ? 'mt-1.5 grid-rows-[1fr] opacity-100' : 'mt-0 grid-rows-[0fr] opacity-0'
+                active ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
               }`}
             >
               <div className="overflow-hidden">
                 <div
                   className={`text-leaf transition-transform duration-300 ease-out ${
-                    active ? 'translate-y-0' : '-translate-y-2'
+                    active ? 'translate-y-0' : '-translate-y-3'
                   }`}
                 >
                   <Icon name={item.icon} size={24} />
                 </div>
               </div>
             </div>
+            {/* the line */}
+            <div
+              className={`h-[3px] rounded-full transition-all duration-300 ${
+                active ? 'mt-1.5 w-12 bg-leaf' : 'mt-0 w-8 bg-white/20'
+              }`}
+            />
             {/* the label, o-music COVER style */}
             <span
               className={`mt-1 text-xs tracking-[0.22em] uppercase transition-colors duration-300 ${
