@@ -5,7 +5,7 @@
 // locally between them.
 
 import { getClient } from './client';
-import { JellyfinClient, type Track } from './jellyfin';
+import { JellyfinClient, JellyfinError, type Track } from './jellyfin';
 import { RemoteControl, type RemoteSessionInfo } from './remote';
 
 export type RepeatMode = 'off' | 'all' | 'one';
@@ -318,7 +318,7 @@ export class PlaybackEngine {
       this.errorDetail = null;
       this.emit();
       try {
-        await new RemoteControl(this.jf).playNow(this.remoteSessionId!, list.map(t => t.id), idx);
+        await this.remotePlayNow(list, idx);
         this.lastRemoteCmdAt = Date.now();
       } catch (e) {
         this.loading = false;
@@ -652,11 +652,7 @@ export class PlaybackEngine {
       this.errorDetail = null;
       this.emit();
       try {
-        await new RemoteControl(this.jf).playNow(
-          this.remoteSessionId,
-          this.queue.map(t => t.id),
-          i,
-        );
+        await this.remotePlayNow(this.queue, i);
         this.lastRemoteCmdAt = Date.now();
       } catch (e) {
         this.loading = false;
@@ -704,6 +700,54 @@ export class PlaybackEngine {
       // no saved session
     }
     return null;
+  }
+
+  // The remote session id went stale (server 404, or the poll can't find it).
+  // Clients get a new session id when their connection drops and reopens —
+  // look for the same app on the same device and re-attach to its new id.
+  // Returns true only when attached to a *different* session id.
+  private async healRemoteSession(): Promise<boolean> {
+    if (!this.jf || !this.remoteActive) return false;
+    const oldSid = this.remoteSessionId;
+    const gen = this.remoteGen;
+    let sessions: RemoteSessionInfo[];
+    try {
+      sessions = await new RemoteControl(this.jf).discover();
+    } catch {
+      return false;
+    }
+    if (gen !== this.remoteGen) return false;
+    const match =
+      sessions.find(s => s.id !== oldSid && s.client === this.remoteClient && s.deviceName === this.remoteDevice) ??
+      sessions.find(s => s.id !== oldSid && s.client === this.remoteClient);
+    if (!match) return false;
+    this.remoteSessionId = match.id;
+    this.remoteClient = match.client;
+    this.remoteDevice = match.deviceName;
+    try {
+      await getClient().store.put({
+        key: REMOTE_KEY,
+        value: JSON.stringify({ sessionId: match.id, client: match.client, deviceName: match.deviceName }),
+      });
+    } catch {
+      // non-fatal
+    }
+    return true;
+  }
+
+  // Send the Play command, healing a stale session id once before giving up.
+  private async remotePlayNow(list: Track[], idx: number): Promise<void> {
+    if (!this.jf || !this.remoteSessionId) throw new JellyfinError(0, 'no remote session');
+    const rc = new RemoteControl(this.jf);
+    try {
+      await rc.playNow(this.remoteSessionId, list.map(t => t.id), idx);
+      return;
+    } catch (e) {
+      const stale = e instanceof JellyfinError && (e.status === 404 || e.status === 400);
+      if (!stale) throw e;
+      if (!(await this.healRemoteSession()) || !this.jf || !this.remoteSessionId) throw e;
+      await new RemoteControl(this.jf).playNow(this.remoteSessionId, list.map(t => t.id), idx);
+    }
   }
 
   // Engage remote mode: stop any local companion playback (two audio
@@ -783,20 +827,33 @@ export class PlaybackEngine {
 
   private async pollRemote(): Promise<void> {
     const gen = this.remoteGen;
-    const sid = this.remoteSessionId;
+    let sid = this.remoteSessionId;
     if (!this.jf || !sid) return;
-    let st;
-    try {
-      st = await new RemoteControl(this.jf).state(sid);
-    } catch {
-      return; // transient network blip: keep last state, try again next poll
-    }
+    const fetchState = async () => {
+      try {
+        return await new RemoteControl(this.jf!).state(sid!);
+      } catch {
+        return undefined; // transient network blip: keep last state, try again next poll
+      }
+    };
+    let st = await fetchState();
     if (gen !== this.remoteGen) return;
+    if (st === undefined) return;
     if (!st) {
-      // Client closed or went offline: fall back to local mode.
-      this.error = 'Lost the remote session.';
-      this.disableRemote();
-      return;
+      // The session id is stale — the client probably reconnected under a new
+      // id. Re-attach to it instead of dropping to local mode.
+      if ((await this.healRemoteSession()) && this.remoteSessionId) {
+        sid = this.remoteSessionId;
+        st = await fetchState();
+        if (gen !== this.remoteGen) return;
+        if (st === undefined) return;
+      }
+      if (!st) {
+        // Client closed or went offline: fall back to local mode.
+        this.error = 'Lost the remote session.';
+        this.disableRemote();
+        return;
+      }
     }
     this.remoteClient = st.client || this.remoteClient;
     this.remoteDevice = st.deviceName || this.remoteDevice;
