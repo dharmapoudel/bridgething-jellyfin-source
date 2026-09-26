@@ -18,16 +18,16 @@ const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | '
   { view: { name: 'queue' }, icon: 'queue', label: 'Queue' },
 ];
 
-// o-music-style top tab strip: each tab is its uppercase label (like o-music's
-// COVER) with its 2px line directly below the label. The bottom nav bar is gone
-// to reclaim vertical space. The tab's icon is revealed only while the button
-// is pressed: it drops down above the label, then slides back up and hides when
-// the press is lifted. The active tab is shown by its leaf-green line and
-// bright label.
+// o-music-style top tab strip: each tab is a 2px line (touching the very top
+// of the screen) with its label below it, like o-music's COVER label. The
+// bottom nav bar is gone to reclaim vertical space. The tab's icon is revealed
+// only while the button is pressed: it drops down under the line, then slides
+// back up and hides when the press is lifted. The active tab is shown by its
+// leaf-green line and bright label.
 function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
   const activeIdx = view.name === 'home' ? 0 : view.name === 'queue' ? 2 : 1;
   return (
-    <div className="flex shrink-0 items-stretch px-3">
+    <div className="flex shrink-0 items-stretch border-b border-white/10 px-3">
       {NAV_ITEMS.map((item, i) => {
         const active = i === activeIdx;
         return (
@@ -36,11 +36,17 @@ function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
             type="button"
             aria-pressed={active}
             onClick={() => onNav(item.view)}
-            className="group flex flex-1 flex-col items-center justify-start px-2 pb-1.5 active:bg-white/5"
+            className="group flex flex-1 flex-col items-center justify-start px-2 pb-2 active:bg-white/5"
           >
+            {/* the line, touching the very top of the screen */}
+            <div
+              className={`h-[2px] rounded-full transition-all duration-300 ${
+                active ? 'w-12 bg-leaf' : 'w-8 bg-white/20'
+              }`}
+            />
             {/* the icon: revealed only while the button is pressed, slides
                 back up and hides when the press is lifted */}
-            <div className="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-out group-active:grid-rows-[1fr] group-active:opacity-100">
+            <div className="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-out group-active:mt-1.5 group-active:grid-rows-[1fr] group-active:opacity-100">
               <div className="overflow-hidden">
                 <div className="-translate-y-3 text-leaf transition-transform duration-300 ease-out group-active:translate-y-0">
                   <Icon name={item.icon} size={24} />
@@ -49,18 +55,12 @@ function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
             </div>
             {/* the label, o-music COVER style */}
             <span
-              className={`text-xs tracking-[0.22em] uppercase transition-all duration-300 group-active:mt-1.5 ${
+              className={`mt-1 text-xs tracking-[0.22em] uppercase transition-colors duration-300 ${
                 active ? 'font-semibold text-white' : 'text-white/45'
               }`}
             >
               {item.label}
             </span>
-            {/* the line directly below the label */}
-            <div
-              className={`mt-1 h-[2px] rounded-full transition-all duration-300 ${
-                active ? 'w-12 bg-leaf' : 'w-8 bg-white/20'
-              }`}
-            />
           </button>
         );
       })}
