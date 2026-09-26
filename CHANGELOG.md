@@ -205,3 +205,6 @@
 
 ## 0.1.43
 - Auto-advance, reworked: two holes found after 0.1.42. (1) The timers died after any pause/resume — pause clears them and only playAt re-armed them, so the end backstop was silently dead in exactly the pause/play testing pattern. The playing snapshot branch now re-arms them via ensureTimers(). (2) The phone can go completely quiet at track end (no stopped, no paused), so there was nothing to react to. In the last 10s of a track Finch now asks the phone directly (stateGet) instead of waiting: the fresh state feeds the normal snapshot branches (paused-end / stopped advance with fresh data, and the clock self-corrects during stalls), and a phone still claiming "playing" at the cap advances directly. Stale poll answers are dropped if the track changed mid-poll; link-down ends stay owned by the reconnect heal.
+
+## 0.1.44
+- The lyrics tab is now a persisted preference: it survives app restarts, not just track changes. Moved from NowPlaying's local state into the player (player.lyricsTab + setLyricsTab), stored in finch:prefs alongside shuffle/repeat and restored by loadPrefs() at boot.

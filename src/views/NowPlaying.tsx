@@ -323,9 +323,11 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
   usePlayer();
   const art = useArt();
   const portrait = usePortrait();
-  const [lyricsTab, setLyricsTab] = useState(false);
   const [lyricsSupported, setLyricsSupported] = useState<boolean | null>(null);
   const [lyrics, setLyrics] = useState<LyricsState>({ state: 'loading' });
+  // Sticky preference owned by the player (persisted across restarts):
+  // usePlayer() above re-renders us when it changes.
+  const lyricsTab = player.lyricsTab;
   const t = player.current();
   const trackId = t?.id;
   const artPanelRef = useRef<HTMLDivElement>(null);
@@ -497,7 +499,7 @@ export default function NowPlaying({ jf, nav, onMinimize }: ViewProps & { onMini
       isFavorite={t.isFavorite}
       onToggleFav={toggleFav}
       lyricsVisible={showLyrics}
-      onToggleLyrics={() => setLyricsTab(v => !v)}
+      onToggleLyrics={() => player.setLyricsTab(!player.lyricsTab)}
       lyricsSupported={lyricsSupported}
       hasLyrics={hasLyrics}
       accent={accent}

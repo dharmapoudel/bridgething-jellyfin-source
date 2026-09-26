@@ -75,6 +75,9 @@ export class PlaybackEngine {
   external = false;
   shuffle = false;
   repeat: RepeatMode = 'off';
+  // Lyrics tab is a sticky preference: on across track changes AND across
+  // app restarts (persisted in finch:prefs with shuffle/repeat).
+  lyricsTab = false;
   volume: number | null = null;
   muted = false;
   private rev = 0;
@@ -432,6 +435,12 @@ export class PlaybackEngine {
     void this.persistPrefs();
   }
 
+  setLyricsTab(on: boolean): void {
+    this.lyricsTab = on;
+    this.emit();
+    void this.persistPrefs();
+  }
+
   playNext(track: Track): void {
     if (this.index < 0) {
       void this.playQueue([track], 0);
@@ -737,7 +746,7 @@ export class PlaybackEngine {
     try {
       await getClient().store.put({
         key: 'finch:prefs',
-        value: JSON.stringify({ shuffle: this.shuffle, repeat: this.repeat }),
+        value: JSON.stringify({ shuffle: this.shuffle, repeat: this.repeat, lyricsTab: this.lyricsTab }),
       });
     } catch {
       // non-fatal
@@ -748,9 +757,10 @@ export class PlaybackEngine {
     try {
       const r = await getClient().store.get({ key: 'finch:prefs' });
       if (r.ok && r.response.value) {
-        const p = JSON.parse(r.response.value) as { shuffle?: boolean; repeat?: RepeatMode };
+        const p = JSON.parse(r.response.value) as { shuffle?: boolean; repeat?: RepeatMode; lyricsTab?: boolean };
         if (typeof p.shuffle === 'boolean') this.shuffle = p.shuffle;
         if (p.repeat === 'off' || p.repeat === 'all' || p.repeat === 'one') this.repeat = p.repeat;
+        if (typeof p.lyricsTab === 'boolean') this.lyricsTab = p.lyricsTab;
       }
     } catch {
       // non-fatal
