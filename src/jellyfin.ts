@@ -340,8 +340,28 @@ export class JellyfinClient {
     return (data.Items ?? []).map(map);
   }
 
-  albums(): Promise<Album[]> {
-    return this.items({ IncludeItemTypes: 'MusicAlbum', SortBy: 'SortName', SortOrder: 'Ascending' }, normalizeAlbum);
+  // Bluetooth-tunneled HTTP has no room for unbounded payloads: every list
+  // query that can return a large library takes a server-side Limit (and
+  // StartIndex for paging). A limit of 0 omits the param (unbounded).
+  private static bounded(
+    params: Record<string, string | number | boolean>,
+    startIndex: number,
+    limit: number,
+  ): Record<string, string | number | boolean> {
+    if (startIndex > 0) params.StartIndex = startIndex;
+    if (limit > 0) params.Limit = limit;
+    return params;
+  }
+
+  albums(startIndex = 0, limit = 0): Promise<Album[]> {
+    return this.items(
+      JellyfinClient.bounded(
+        { IncludeItemTypes: 'MusicAlbum', SortBy: 'SortName', SortOrder: 'Ascending' },
+        startIndex,
+        limit,
+      ),
+      normalizeAlbum,
+    );
   }
 
   albumTracks(albumId: string): Promise<Track[]> {
@@ -356,13 +376,24 @@ export class JellyfinClient {
     );
   }
 
-  artists(): Promise<Artist[]> {
-    return this.items({ IncludeItemTypes: 'MusicArtist', SortBy: 'SortName', SortOrder: 'Ascending' }, normalizeArtist);
+  artists(startIndex = 0, limit = 0): Promise<Artist[]> {
+    return this.items(
+      JellyfinClient.bounded(
+        { IncludeItemTypes: 'MusicArtist', SortBy: 'SortName', SortOrder: 'Ascending' },
+        startIndex,
+        limit,
+      ),
+      normalizeArtist,
+    );
   }
 
-  artistTracks(artistId: string): Promise<Track[]> {
+  artistTracks(artistId: string, limit = 500): Promise<Track[]> {
     return this.items(
-      { ArtistIds: artistId, IncludeItemTypes: 'Audio', SortBy: 'Album,SortName', SortOrder: 'Ascending' },
+      JellyfinClient.bounded(
+        { ArtistIds: artistId, IncludeItemTypes: 'Audio', SortBy: 'Album,SortName', SortOrder: 'Ascending' },
+        0,
+        limit,
+      ),
       normalizeTrack,
     );
   }
@@ -374,12 +405,22 @@ export class JellyfinClient {
     );
   }
 
-  playlists(): Promise<Playlist[]> {
-    return this.items({ IncludeItemTypes: 'Playlist', SortBy: 'SortName', SortOrder: 'Ascending' }, normalizePlaylist);
+  playlists(limit = 0): Promise<Playlist[]> {
+    return this.items(
+      JellyfinClient.bounded(
+        { IncludeItemTypes: 'Playlist', SortBy: 'SortName', SortOrder: 'Ascending' },
+        0,
+        limit,
+      ),
+      normalizePlaylist,
+    );
   }
 
-  playlistItems(playlistId: string): Promise<Track[]> {
-    return this.items({ ParentId: playlistId, IncludeItemTypes: 'Audio' }, normalizeTrack);
+  playlistItems(playlistId: string, limit = 500): Promise<Track[]> {
+    return this.items(
+      JellyfinClient.bounded({ ParentId: playlistId, IncludeItemTypes: 'Audio' }, 0, limit),
+      normalizeTrack,
+    );
   }
 
   async genres(): Promise<Genre[]> {
@@ -394,8 +435,15 @@ export class JellyfinClient {
     return this.items({ GenreIds: genreId, IncludeItemTypes: 'Audio', SortBy: 'SortName' }, normalizeTrack);
   }
 
-  favorites(): Promise<Track[]> {
-    return this.items({ Filters: 'IsFavorite', IncludeItemTypes: 'Audio', SortBy: 'SortName' }, normalizeTrack);
+  favorites(limit = 0): Promise<Track[]> {
+    return this.items(
+      JellyfinClient.bounded(
+        { Filters: 'IsFavorite', IncludeItemTypes: 'Audio', SortBy: 'SortName' },
+        0,
+        limit,
+      ),
+      normalizeTrack,
+    );
   }
 
   async toggleFavorite(itemId: string, favorite: boolean): Promise<void> {

@@ -46,7 +46,11 @@ const END_WATCH_MS = 5000;
 const END_POLL_WINDOW_MS = 10_000;
 // Remote mode: server session polls. Position only needs to be
 // fresh enough for the progress bar; commands are instant.
-const REMOTE_POLL_MS = 3000;
+// Remote-mode poll: a steady drip of tiny /Sessions reads keeps Finch in
+// sync with Finamp. Kept slow (10s) and paused entirely while the phone
+// link is down — polling into a dead link is exactly the kind of traffic
+// that keeps a struggling Bluetooth connection from recovering.
+const REMOTE_POLL_MS = 10000;
 // After we send a remote command our optimistic local state wins over poll
 // data for this long, so the UI doesn't flicker back mid-flight.
 const REMOTE_CMD_SETTLE_MS = 2000;
@@ -1003,11 +1007,22 @@ export class PlaybackEngine {
         if (!this.remoteLinkDown) {
           this.remoteLinkDown = true;
           this.error = 'The phone link dropped.';
+          // Pause the remote poll while the link is down: hammering a dead
+          // link keeps the Bluetooth connection from recovering.
+          if (this.remotePollTimer !== null) {
+            window.clearInterval(this.remotePollTimer);
+            this.remotePollTimer = null;
+          }
           this.emit();
         }
       } else if (this.remoteLinkDown) {
         this.remoteLinkDown = false;
         if (this.error === 'The phone link dropped.') this.error = null;
+        // Resume the poll on reconnect (it was paused above, or the poll
+        // backstop below may have left it running).
+        if (this.remotePollTimer === null) {
+          this.remotePollTimer = window.setInterval(() => void this.pollRemote(), REMOTE_POLL_MS);
+        }
         this.emit();
         void this.pollRemote();
       }

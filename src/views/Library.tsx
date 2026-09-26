@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
-import { AuthError, Empty, Spinner, Tile, friendlyError, useArt, useLinkGen, warmArt, cancelWarmArt } from '../components';
+import { AuthError, Empty, Spinner, Tile, friendlyError, useArt, useLinkGen } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Artist, type Genre, type Playlist } from '../jellyfin';
 import type { LibTab, ViewProps } from '../nav';
+
+// One Bluetooth-tunneled list response must stay small: the albums/artists
+// tabs page through the library instead of fetching it as one giant JSON
+// blob (a multi-thousand-album library in a single frame is what was
+// knocking the link over). Pages render progressively and the rest fill in
+// behind while the user browses.
+const LIB_PAGE = 120;
 
 const TABS: { id: LibTab; label: string }[] = [
   { id: 'albums', label: 'Albums' },
@@ -23,6 +30,7 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
   const [error, setError] = useState<string | null>(null);
   const [rawError, setRawError] = useState<unknown>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const linkGen = useLinkGen();
 
   useEffect(() => setTab(initialTab), [initialTab]);
@@ -48,21 +56,51 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
     let dead = false;
     setError(null);
     setRawError(null);
+    setLoadingMore(false);
+    // Page through a large list in bounded frames, rendering progressively.
+    // Tab switches and retries abandon the loop via `dead`.
+    const loadPaged = async <T,>(
+      stickyKey: string,
+      hasData: boolean,
+      fetchPage: (start: number, limit: number) => Promise<T[]>,
+      setData: (d: T[]) => void,
+    ): Promise<void> => {
+      const all: T[] = [];
+      let start = 0;
+      for (;;) {
+        let page: T[];
+        try {
+          page = await fetchPage(start, LIB_PAGE);
+        } catch (e) {
+          if (!dead && all.length === 0 && !hasData) {
+            setError(friendlyError(e));
+            setRawError(e);
+          }
+          // Otherwise keep what we have; a later visit retries.
+          if (!dead) setLoadingMore(false);
+          return;
+        }
+        if (dead) return;
+        all.push(...page);
+        setData([...all]);
+        if (page.length < LIB_PAGE) break;
+        setLoadingMore(true);
+        start += LIB_PAGE;
+      }
+      if (!dead) {
+        setLoadingMore(false);
+        stickySet(stickyKey, all);
+      }
+    };
     const load = async (): Promise<void> => {
       try {
         if (tab === 'albums') {
-          const d = await cached('lib:albums', () => jf.albums());
-          if (!dead) {
-            setAlbums(d);
-            stickySet('lib:albums', d);
-          }
+          await loadPaged('lib:albums', !!albums, (s, l) => jf.albums(s, l), setAlbums);
+          return;
         }
         if (tab === 'artists') {
-          const d = await cached('lib:artists', () => jf.artists());
-          if (!dead) {
-            setArtists(d);
-            stickySet('lib:artists', d);
-          }
+          await loadPaged('lib:artists', !!artists, (s, l) => jf.artists(s, l), setArtists);
+          return;
         }
         if (tab === 'playlists') {
           const d = await cached('lib:playlists', () => jf.playlists());
@@ -111,24 +149,11 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
       .catch(() => {});
   };
 
-  // prefetch artwork for the current tab only (capped, throttled, and
-  // cancellable): the old version fired one daemon fetch per album/artist/
-  // playlist at once, and the burst was knocking the Bluetooth link over.
-  useEffect(() => {
-    cancelWarmArt();
-    const srcs =
-      tab === 'albums'
-        ? (albums ?? []).map(a => art?.albumArt(a))
-        : tab === 'artists'
-          ? (artists ?? []).map(a => art?.artistArt(a))
-          : tab === 'playlists'
-            ? (playlists ?? []).map(p => art?.playlistArt(p))
-            : [];
-    if (srcs.length) warmArt(srcs);
-    return () => {
-      cancelWarmArt();
-    };
-  }, [tab, albums, artists, playlists, art]);
+  // Artwork loads on demand as tiles mount (IntersectionObserver + the
+  // 4-concurrent gate in components.tsx). The old warmArt prefetch fired up
+  // to 48 image fetches at the exact moment the list JSON was in flight,
+  // and that combined burst was knocking the Bluetooth link over — so no
+  // prefetch here; visible tiles still paint fast via the demand loader.
 
   return (
     <div className="flex h-full flex-col">
@@ -158,39 +183,45 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
           )
         ) : tab === 'albums' ? (
           albums ? (
-            <div className="flex flex-wrap gap-4">
-              {albums.map(a => (
-                <Tile
-                  key={a.id}
-                  title={a.name}
-                  subtitle={a.artist}
-                  art={art?.albumArt(a) ?? null}
-                  onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
-                  onMenu={() => openMenu(a.name, albumActions(a, jf, nav))}
-                />
-              ))}
-            </div>
+            <>
+              <div className="flex flex-wrap gap-4">
+                {albums.map(a => (
+                  <Tile
+                    key={a.id}
+                    title={a.name}
+                    subtitle={a.artist}
+                    art={art?.albumArt(a) ?? null}
+                    onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
+                    onMenu={() => openMenu(a.name, albumActions(a, jf, nav))}
+                  />
+                ))}
+              </div>
+              {loadingMore && <p className="mt-4 text-center text-sm text-white/40">Loading more…</p>}
+            </>
           ) : (
             <Spinner />
           )
         ) : tab === 'artists' ? (
           artists ? (
-            <div className="flex flex-wrap gap-4">
-              {artists.map(a => (
-                <Tile
-                  key={a.id}
-                  title={a.name}
-                  art={art?.artistArt(a) ?? null}
-                  onClick={() => nav({ name: 'detail', kind: 'artist', id: a.id, title: a.name })}
-                  onMenu={() =>
-                    openMenu(a.name, [
-                      { label: 'Shuffle artist', icon: 'shuffle', run: () => shuffleArtist(a, true) },
-                      { label: 'Play artist', icon: 'play', run: () => shuffleArtist(a, false) },
-                    ])
-                  }
-                />
-              ))}
-            </div>
+            <>
+              <div className="flex flex-wrap gap-4">
+                {artists.map(a => (
+                  <Tile
+                    key={a.id}
+                    title={a.name}
+                    art={art?.artistArt(a) ?? null}
+                    onClick={() => nav({ name: 'detail', kind: 'artist', id: a.id, title: a.name })}
+                    onMenu={() =>
+                      openMenu(a.name, [
+                        { label: 'Shuffle artist', icon: 'shuffle', run: () => shuffleArtist(a, true) },
+                        { label: 'Play artist', icon: 'play', run: () => shuffleArtist(a, false) },
+                      ])
+                    }
+                  />
+                ))}
+              </div>
+              {loadingMore && <p className="mt-4 text-center text-sm text-white/40">Loading more…</p>}
+            </>
           ) : (
             <Spinner />
           )

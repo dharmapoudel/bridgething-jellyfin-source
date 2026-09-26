@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { albumActions, playlistActions, trackActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
-import { AuthError, Empty, Spinner, Tile, TrackRow, useArt, usePlayer, warmArt, type MenuAction } from '../components';
+import { AuthError, Empty, Spinner, Tile, TrackRow, useArt, usePlayer, type MenuAction } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Playlist, type Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
@@ -73,18 +73,14 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
 
   const recent = useLoad<Track[]>('home:recent', () => jf.recentlyPlayedTracks(12));
   const added = useLoad<Album[]>('home:added', () => jf.recentlyAddedAlbums(12));
-  const favs = useLoad<Track[]>('home:favs', () => jf.favorites().then(f => f.slice(0, 12)));
-  const playlists = useLoad<Playlist[]>('home:playlists', () => jf.playlists().then(p => p.slice(0, 12)));
+  // Server-side limits: fetching every favorite/playlist as one giant JSON
+  // blob was knocking the Bluetooth link over; only 12 are ever shown.
+  const favs = useLoad<Track[]>('home:favs', () => jf.favorites(12));
+  const playlists = useLoad<Playlist[]>('home:playlists', () => jf.playlists(12));
 
-  // prefetch artwork for freshly loaded rails so tiles paint instantly
-  useEffect(() => {
-    warmArt([
-      ...(recent.data ?? []).map(t => art?.trackArt(t)),
-      ...(added.data ?? []).map(a => art?.albumArt(a)),
-      ...(favs.data ?? []).map(t => art?.trackArt(t)),
-      ...(playlists.data ?? []).map(p => art?.playlistArt(p)),
-    ]);
-  }, [recent.data, added.data, favs.data, playlists.data, art]);
+  // No artwork prefetch on Home mount: the rails' JSON is in flight at the
+  // same moment, and the combined burst was dropping the Bluetooth link.
+  // Visible tiles load on demand via the IntersectionObserver loader.
 
   const menuFor = (t: Track): MenuAction[] => trackActions(t, jf, nav);
 
