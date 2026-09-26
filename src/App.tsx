@@ -146,31 +146,6 @@ export default function App() {
   const [stack, setStack] = useState<View[]>([{ name: 'home' }]);
   const [queueOpen, setQueueOpen] = useState(false);
   const [daemonUp, setDaemonUp] = useState(true);
-  // which top tab is currently pressed (touch or hardware preset button).
-  // drives the icon push-down reveal; a hardware press never sets :active
-  // on the on-screen button, so this is state-driven instead of CSS-only.
-  const [pressedIdx, setPressedIdx] = useState<number | null>(null);
-  const pressClearRef = useRef<number | null>(null);
-  const clearPressed = useCallback(() => {
-    if (pressClearRef.current !== null) {
-      window.clearTimeout(pressClearRef.current);
-      pressClearRef.current = null;
-    }
-    setPressedIdx(null);
-  }, []);
-  const pressTab = useCallback(
-    (i: number, v: View) => {
-      setPressedIdx(i);
-      // safety: if the device never sends keyup, don't leave the icon stuck
-      if (pressClearRef.current !== null) window.clearTimeout(pressClearRef.current);
-      pressClearRef.current = window.setTimeout(() => {
-        pressClearRef.current = null;
-        setPressedIdx(null);
-      }, 1200);
-      nav(v);
-    },
-    [nav],
-  );
   const menu = useMenu();
   usePlayer();
 
@@ -286,6 +261,33 @@ export default function App() {
     const isRoot = v.name === 'home' || v.name === 'library' || v.name === 'queue' || v.name === 'nowplaying';
     setStack(prev => (isRoot ? [v] : [...prev, v]));
   }, []);
+
+  // which top tab is currently pressed (touch or hardware preset button).
+  // drives the icon push-down reveal; a hardware press never sets :active
+  // on the on-screen button, so this is state-driven instead of CSS-only.
+  // (defined after nav: pressTab navigates on hardware presses.)
+  const [pressedIdx, setPressedIdx] = useState<number | null>(null);
+  const pressClearRef = useRef<number | null>(null);
+  const clearPressed = useCallback(() => {
+    if (pressClearRef.current !== null) {
+      window.clearTimeout(pressClearRef.current);
+      pressClearRef.current = null;
+    }
+    setPressedIdx(null);
+  }, []);
+  const pressTab = useCallback(
+    (i: number, v: View) => {
+      setPressedIdx(i);
+      // safety: if the device never sends keyup, don't leave the icon stuck
+      if (pressClearRef.current !== null) window.clearTimeout(pressClearRef.current);
+      pressClearRef.current = window.setTimeout(() => {
+        pressClearRef.current = null;
+        setPressedIdx(null);
+      }, 1200);
+      nav(v);
+    },
+    [nav],
+  );
 
   const minimizeNowPlaying = useCallback(() => {
     nav(returnViewRef.current);
