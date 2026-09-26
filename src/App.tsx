@@ -42,7 +42,7 @@ function TopTabs({
   const activeIdx = view.name === 'home' ? 0 : view.name === 'queue' ? 2 : 1;
   return (
     <div
-      className={`relative z-10 h-[30px] shrink-0 border-b border-white/10 transition-all duration-300 ${
+      className={`relative z-10 h-[30px] shrink-0 transition-all duration-300 ${
         pressedIdx !== null ? 'h-[60px]' : ''
       }`}
     >
