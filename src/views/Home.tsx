@@ -10,7 +10,6 @@ import {
   SkeletonRow,
   SkeletonTile,
   Tile,
-  TrackRow,
   useArt,
   useArtAccent,
   usePlayer,
@@ -109,7 +108,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
     nowId !== null && !player.external && !player.error && (player.intentPlaying || player.loading);
 
   const recent = useLoad<Track[]>('home:recent', () => jf.recentlyPlayedTracks(12));
-  const added = useLoad<Album[]>('home:added', () => jf.recentlyAddedAlbums(12));
+  const added = useLoad<Album[]>('home:added', () => jf.recentlyAddedAlbums(4));
   // Server-side limit: fetching every favorite as one giant JSON blob was
   // knocking the Bluetooth link over; only 12 are ever shown.
   const favs = useLoad<Track[]>('home:favs', () => jf.favorites(12));
@@ -155,7 +154,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
                 return (
                   <Rise key={t.id} i={i}>
                     <Tile
-                      size={180}
+                      size={120}
                       title={t.name}
                       subtitle={t.artist}
                       art={art?.trackArt(t) ?? null}
@@ -216,22 +215,31 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
         ) : null}
 
         {favs.data && favs.data.length ? (
-          <section className="mb-7 px-3">
-            <h2 className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/80">Favorites</h2>
-            {favs.data.slice(0, 5).map((t, i) => (
-              <Rise key={t.id} i={i}>
-                <TrackRow
-                  track={t}
-                  art={art?.trackArt(t) ?? null}
-                  onPlay={() => {
-                    nav({ name: 'nowplaying' });
-                    void player.playQueue(favs.data!, favs.data!.indexOf(t));
-                  }}
-                  onMenu={() => openMenu(t.name, menuFor(t))}
-                />
-              </Rise>
-            ))}
-          </section>
+          <Rise>
+            <Rail title="Favorites">
+              {favs.data.map((t, i) => {
+                const isCurrent = nowActive && t.id === nowId;
+                return (
+                  <Rise key={t.id} i={i}>
+                    <Tile
+                      size={120}
+                      title={t.name}
+                      subtitle={t.artist}
+                      art={art?.trackArt(t) ?? null}
+                      active={isCurrent}
+                      onClick={() => {
+                        nav({ name: 'nowplaying' });
+                        // Tapping the currently-playing tile just opens Now
+                        // Playing; every other tile starts it from scratch.
+                        if (!isCurrent) void player.playQueue(favs.data!, favs.data!.indexOf(t));
+                      }}
+                      onMenu={() => openMenu(t.name, menuFor(t))}
+                    />
+                  </Rise>
+                );
+              })}
+            </Rail>
+          </Rise>
         ) : null}
       </div>
     </div>
