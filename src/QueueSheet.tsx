@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Artwork, Icon, IconBtn, useArt, usePlayer } from './components';
+import { Artwork, Icon, IconBtn, useArt, useArtAccent, usePlayer } from './components';
 import { player } from './player';
 
 // The small, almost-transparent bar at the bottom center of every screen
@@ -34,6 +34,9 @@ export function QueueSheet({ onClose, onOpenNowPlaying }: { onClose: () => void;
   const art = useArt();
   const upcoming = player.queue.slice(player.index + 1);
   const current = player.current();
+  // the now-playing card picks up the track's art color
+  const npArt = current && art ? (art.trackArt(current, 200) ?? null) : null;
+  const npAccent = useArtAccent(npArt);
   const sheetRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLButtonElement>(null);
@@ -111,7 +114,10 @@ export function QueueSheet({ onClose, onOpenNowPlaying }: { onClose: () => void;
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6" ref={listRef}>
           {current ? (
-            <div className="mb-2 flex items-center gap-3 rounded-2xl bg-leaf/10 p-2">
+            <div
+              className={`mb-2 flex items-center gap-3 rounded-2xl p-2 ${npAccent ? '' : 'bg-leaf/10'}`}
+              style={npAccent ? { backgroundColor: `color-mix(in srgb, ${npAccent} 16%, transparent)` } : undefined}
+            >
               <button
                 type="button"
                 onClick={onOpenNowPlaying}

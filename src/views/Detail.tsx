@@ -1,7 +1,21 @@
 import { useEffect, useState } from 'react';
 import { trackActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
-import { Artwork, Empty, Icon, Spinner, Tile, TopBar, TrackRow, friendlyError, useArt, useLinkGen } from '../components';
+import {
+  AmbientArt,
+  Artwork,
+  Empty,
+  Icon,
+  Rise,
+  SkeletonRow,
+  Tile,
+  TopBar,
+  TrackRow,
+  friendlyError,
+  useArt,
+  useArtAccent,
+  useLinkGen,
+} from '../components';
 import { player } from '../player';
 import type { Album, Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
@@ -15,6 +29,27 @@ interface DetailParams {
 interface StickyDetail {
   tracks: Track[];
   albums: Album[] | null;
+}
+
+function SkeletonDetail() {
+  return (
+    <div aria-hidden>
+      <div className="mb-5 flex items-end gap-5">
+        <div className="skeleton h-40 w-40 shrink-0 rounded-3xl" />
+        <div className="min-w-0 flex-1 pb-1">
+          <div className="skeleton h-9 w-3/4 rounded-lg" />
+          <div className="skeleton mt-2 h-6 w-1/3 rounded-md" />
+          <div className="mt-4 flex gap-3">
+            <div className="skeleton h-16 w-36 rounded-full" />
+            <div className="skeleton h-16 w-16 rounded-full" />
+          </div>
+        </div>
+      </div>
+      {[0, 1, 2, 3, 4].map(i => (
+        <SkeletonRow key={i} />
+      ))}
+    </div>
+  );
 }
 
 export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & { params: DetailParams }) {
@@ -88,82 +123,98 @@ export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & 
     }
   };
 
-  const headerArt = tracks?.[0] && params.kind !== 'album' ? (art?.trackArt(tracks[0], 256) ?? null) : null;
+  // Header art: the first track's art carries the album/playlist cover for
+  // every kind. The accent color is sampled from it.
+  const headerArt = tracks?.[0] ? (art?.trackArt(tracks[0], 512) ?? null) : null;
+  const accent = useArtAccent(headerArt);
 
   return (
     <div className="flex h-full flex-col">
       <TopBar title={params.title} onBack={back} />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {error ? (
-          <Empty text={`Could not load: ${error}`} onRetry={() => setRetryKey(k => k + 1)} />
-        ) : !tracks ? (
-          <Spinner />
-        ) : tracks.length === 0 ? (
-          <Empty text="Nothing here yet." />
-        ) : (
-          <>
-            <div className="mb-4 flex items-center gap-4">
-              {params.kind === 'album' || params.kind === 'artist' ? (
-                <Artwork src={headerArt} size={120} label={params.title} />
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
+        <AmbientArt src={headerArt} accent={accent} height={300} />
+        <div className="relative px-5 py-5">
+          {error ? (
+            <Empty text={`Could not load: ${error}`} onRetry={() => setRetryKey(k => k + 1)} />
+          ) : !tracks ? (
+            <SkeletonDetail />
+          ) : tracks.length === 0 ? (
+            <Empty text="Nothing here yet." />
+          ) : (
+            <>
+              <Rise>
+                <div className="mb-6 flex items-end gap-5">
+                  <div className="shrink-0 shadow-2xl shadow-black/60">
+                    <Artwork src={headerArt} size={160} rounded="rounded-3xl" label={params.title} />
+                  </div>
+                  <div className="min-w-0 flex-1 pb-1">
+                    <div className="text-3xl leading-tight font-bold tracking-tight">{params.title}</div>
+                    <div className="mt-1 text-xl text-white/60">
+                      {tracks.length} track{tracks.length === 1 ? '' : 's'}
+                    </div>
+                    <div className="mt-4 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => playAll(false)}
+                        style={accent ? { backgroundColor: accent } : undefined}
+                        className={`flex h-16 shrink-0 items-center gap-2 rounded-full px-7 text-2xl font-bold text-black active:brightness-90 ${
+                          accent ? '' : 'bg-leaf'
+                        }`}
+                      >
+                        <Icon name="play" size={28} /> Play
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Shuffle play"
+                        onClick={() => playAll(true)}
+                        className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white/10 active:bg-white/20"
+                      >
+                        <Icon name="shuffle" size={28} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </Rise>
+
+              {albums && albums.length ? (
+                <div className="mb-6">
+                  <h2 className="mb-2.5 text-2xl font-bold tracking-tight">Albums</h2>
+                  <div className="flex gap-4 overflow-x-auto pb-1">
+                    {albums.map((a, i) => (
+                      <Rise key={a.id} i={i}>
+                        <Tile
+                          size={180}
+                          title={a.name}
+                          subtitle={a.year ? String(a.year) : undefined}
+                          art={art?.albumArt(a) ?? null}
+                          onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
+                        />
+                      </Rise>
+                    ))}
+                  </div>
+                </div>
               ) : null}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-3xl font-bold">{params.title}</div>
-                <div className="text-xl text-white/50">
-                  {tracks.length} track{tracks.length === 1 ? '' : 's'}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => playAll(false)}
-                className="flex h-18 shrink-0 items-center gap-2 rounded-full bg-leaf px-6 text-2xl font-bold text-black active:brightness-90"
-              >
-                <Icon name="play" size={30} /> Play
-              </button>
-              <button
-                type="button"
-                aria-label="Shuffle play"
-                onClick={() => playAll(true)}
-                className="flex h-18 w-18 shrink-0 items-center justify-center rounded-full bg-white/10 active:bg-white/20"
-              >
-                <Icon name="shuffle" size={30} />
-              </button>
-            </div>
 
-            {albums && albums.length ? (
-              <div className="mb-4">
-                <h2 className="mb-2 text-2xl font-semibold">Albums</h2>
-                <div className="flex gap-4 overflow-x-auto pb-1">
-                  {albums.map(a => (
-                    <Tile
-                      key={a.id}
-                      title={a.name}
-                      subtitle={a.year ? String(a.year) : undefined}
-                      art={art?.albumArt(a) ?? null}
-                      onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
+              <div className="flex flex-col">
+                {tracks.map((t, i) => (
+                  <Rise key={t.id} i={i}>
+                    <TrackRow
+                      track={t}
+                      art={params.kind === 'album' ? null : art?.trackArt(t) ?? null}
+                      showArt={params.kind !== 'album'}
+                      indexLabel={params.kind === 'album' ? String(i + 1) : undefined}
+                      onPlay={() => {
+                        nav({ name: 'nowplaying' });
+                        void player.playQueue(tracks, i);
+                      }}
+                      onMenu={() => openMenu(t.name, trackActions(t, jf, nav))}
                     />
-                  ))}
-                </div>
+                  </Rise>
+                ))}
               </div>
-            ) : null}
-
-            <div className="flex flex-col">
-              {tracks.map((t, i) => (
-                <TrackRow
-                  key={t.id}
-                  track={t}
-                  art={params.kind === 'album' ? null : art?.trackArt(t) ?? null}
-                  showArt={params.kind !== 'album'}
-                  indexLabel={params.kind === 'album' ? String(i + 1) : undefined}
-                  onPlay={() => {
-                    nav({ name: 'nowplaying' });
-                    void player.playQueue(tracks, i);
-                  }}
-                  onMenu={() => openMenu(t.name, trackActions(t, jf, nav))}
-                />
-              ))}
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

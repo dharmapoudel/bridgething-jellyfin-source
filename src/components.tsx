@@ -371,11 +371,13 @@ export function Artwork({
   size,
   rounded = 'rounded-xl',
   label = '',
+  fluid = false,
 }: {
   src: string | null;
   size: number;
   rounded?: string;
   label?: string;
+  fluid?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
@@ -404,7 +406,11 @@ export function Artwork({
   }, []);
   const { url, failed } = useCachedArt(near ? src : null);
   return (
-    <div ref={ref} className="shrink-0" style={{ width: size, height: size }}>
+    <div
+      ref={ref}
+      className="shrink-0"
+      style={fluid ? { width: '100%', aspectRatio: '1 / 1' } : { width: size, height: size }}
+    >
       {!src || failed || !url ? (
         <div
           className={`flex h-full w-full items-center justify-center bg-white/8 text-white/25 ${rounded}`}
@@ -530,6 +536,7 @@ export function Tile({
   onClick,
   onMenu,
   active,
+  size = 160,
 }: {
   title: string;
   subtitle?: string;
@@ -537,12 +544,13 @@ export function Tile({
   onClick: () => void;
   onMenu?: () => void;
   active?: boolean;
+  size?: number;
 }) {
   return (
-    <div className="relative w-40 shrink-0">
+    <div className="relative shrink-0" style={{ width: size }}>
       <button type="button" onClick={onClick} className="block w-full text-left active:opacity-80">
-        <div className={active ? 'rounded-xl ring-2 ring-leaf ring-offset-2 ring-offset-black' : undefined}>
-          <Artwork src={art} size={160} label={title} />
+        <div className={active ? 'rounded-3xl ring-2 ring-leaf ring-offset-2 ring-offset-black' : undefined}>
+          <Artwork src={art} size={size} rounded="rounded-3xl" label={title} />
         </div>
         <div className={`mt-2 truncate text-lg leading-tight font-medium ${active ? 'text-leaf' : ''}`}>{title}</div>
         {subtitle ? <div className="truncate text-base leading-tight text-white/50">{subtitle}</div> : null}
@@ -583,11 +591,11 @@ export function TrackRow({
   const active = player.current()?.id === track.id;
   return (
     <div
-      className={`flex min-h-16 items-center gap-3 rounded-xl px-2 py-2 ${active ? 'bg-leaf/10' : 'active:bg-white/8'}`}
+      className={`flex min-h-16 items-center gap-3 rounded-2xl px-2.5 py-2 ${active ? 'bg-leaf/10' : 'active:bg-white/8'}`}
     >
       <button type="button" onClick={onPlay} className="flex min-w-0 flex-1 items-center gap-3 text-left">
         {showArt ? (
-          <Artwork src={art} size={56} rounded="rounded-lg" label={track.album} />
+          <Artwork src={art} size={56} rounded="rounded-2xl" label={track.album} />
         ) : indexLabel ? (
           <span className="w-10 shrink-0 text-center text-xl text-white/40">{indexLabel}</span>
         ) : null}
@@ -802,4 +810,191 @@ export function useMenu() {
   const [menu, setMenu] = useState<{ title: string; actions: MenuAction[] } | null>(null);
   const sheet = menu ? <MenuSheet title={menu.title} actions={menu.actions} onClose={() => setMenu(null)} /> : null;
   return useMemo(() => ({ open: setMenu, sheet }), [sheet]);
+}
+
+// ---- option-B skin: bigger rounded cards, motion, art accents ----
+
+export function GridCard({
+  art,
+  title,
+  subtitle,
+  onClick,
+  onMenu,
+  active,
+}: {
+  art: string | null;
+  title: string;
+  subtitle?: string;
+  onClick: () => void;
+  onMenu?: () => void;
+  active?: boolean;
+}) {
+  return (
+    <div className="relative cursor-pointer" onClick={onClick}>
+      <div className={active ? 'rounded-3xl ring-2 ring-leaf ring-offset-2 ring-offset-black' : undefined}>
+        <Artwork src={art} size={320} rounded="rounded-3xl" label={title} fluid />
+      </div>
+      <div className={`mt-2 truncate px-1 text-lg leading-tight font-semibold ${active ? 'text-leaf' : ''}`}>
+        {title}
+      </div>
+      {subtitle ? <div className="truncate px-1 text-base leading-tight text-white/50">{subtitle}</div> : null}
+      {onMenu ? (
+        <button
+          type="button"
+          aria-label={`More options for ${title}`}
+          onClick={e => {
+            e.stopPropagation();
+            onMenu();
+          }}
+          className="absolute top-1.5 right-1.5 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white/90 active:bg-black/80"
+        >
+          <Icon name="dots" size={26} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export function Rise({ i = 0, className = '', children }: { i?: number; className?: string; children: ReactNode }) {
+  return (
+    <div className={`animate-rise ${className}`} style={{ animationDelay: `${Math.min(i, 7) * 45}ms` }}>
+      {children}
+    </div>
+  );
+}
+
+export function SkeletonTile({ size = 180 }: { size?: number }) {
+  return (
+    <div className="shrink-0" style={{ width: size }} aria-hidden>
+      <div className="skeleton rounded-3xl" style={{ width: size, height: size }} />
+      <div className="skeleton mt-2 h-6 w-4/5 rounded-md" />
+      <div className="skeleton mt-1.5 h-5 w-3/5 rounded-md" />
+    </div>
+  );
+}
+
+export function SkeletonGridCard() {
+  return (
+    <div aria-hidden>
+      <div className="skeleton aspect-square w-full rounded-3xl" />
+      <div className="skeleton mt-2 h-6 w-4/5 rounded-md" />
+      <div className="skeleton mt-1.5 h-5 w-3/5 rounded-md" />
+    </div>
+  );
+}
+
+export function SkeletonRow() {
+  return (
+    <div className="flex min-h-[72px] items-center gap-3 px-3 py-2" aria-hidden>
+      <div className="skeleton h-14 w-14 shrink-0 rounded-2xl" />
+      <div className="min-w-0 flex-1">
+        <div className="skeleton h-6 w-2/3 rounded-md" />
+        <div className="skeleton mt-1.5 h-5 w-1/3 rounded-md" />
+      </div>
+    </div>
+  );
+}
+
+/* Dominant-color accent, sampled from a track's artwork once and cached.
+   Feeds the "accent from album art" parts of the skin: play buttons,
+   ambient glows, detail-header tints. Null until sampled. */
+const accentCache = new Map<string, string>();
+export function useArtAccent(src: string | null): string | null {
+  const [color, setColor] = useState<string | null>(() =>
+    src ? (accentCache.get(src) ?? null) : null,
+  );
+  useEffect(() => {
+    if (!src) {
+      setColor(null);
+      return;
+    }
+    const hit = accentCache.get(src);
+    if (hit) {
+      setColor(hit);
+      return;
+    }
+    let dead = false;
+    void loadArt(src).then(obj => {
+      if (dead || !obj) return;
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = 32;
+          c.height = 32;
+          const ctx = c.getContext('2d');
+          if (!ctx || dead) return;
+          ctx.drawImage(img, 0, 0, 32, 32);
+          const d = ctx.getImageData(0, 0, 32, 32).data;
+          let r = 0, g = 0, b = 0, n = 0;
+          for (let i = 0; i < d.length; i += 32) {
+            if (d[i + 3] < 128) continue;
+            r += d[i];
+            g += d[i + 1];
+            b += d[i + 2];
+            n++;
+          }
+          if (!n || dead) return;
+          r = Math.round(r / n);
+          g = Math.round(g / n);
+          b = Math.round(b / n);
+          // lift the average so dark/muddy covers still read as a color
+          const mx = Math.max(r, g, b, 1);
+          const boost = Math.min(1.6, 200 / mx);
+          r = Math.min(255, Math.round(r * boost));
+          g = Math.min(255, Math.round(g * boost));
+          b = Math.min(255, Math.round(b * boost));
+          const col = `rgb(${r}, ${g}, ${b})`;
+          accentCache.set(src, col);
+          if (!dead) setColor(col);
+        } catch {
+          /* canvas tainted or art missing — accent stays null */
+        }
+      };
+      img.onerror = () => {};
+      img.src = obj;
+    });
+    return () => {
+      dead = true;
+    };
+  }, [src]);
+  return color;
+}
+
+/* Ambient blurred-artwork backdrop: the source art blown up and blurred
+   behind a scrim, plus an optional art-accent glow. Pinned to the top of
+   the scrolling view it wraps. */
+export function AmbientArt({
+  src,
+  accent,
+  height = 320,
+}: {
+  src: string | null;
+  accent?: string | null;
+  height?: number;
+}) {
+  const { url } = useCachedArt(src);
+  if (!url) return null;
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden"
+      style={{ height }}
+      aria-hidden
+    >
+      <img
+        src={url}
+        className="h-full w-full scale-150 object-cover opacity-40 blur-3xl"
+        draggable={false}
+      />
+      {accent && (
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            background: `radial-gradient(120% 90% at 50% 0%, ${accent} 0%, transparent 70%)`,
+          }}
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-zinc-950/30 to-zinc-950" />
+    </div>
+  );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { albumActions, playlistActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
-import { AuthError, Empty, Spinner, Tile, friendlyError, useArt, useLinkGen } from '../components';
+import { AuthError, Empty, GridCard, SkeletonGridCard, Spinner, friendlyError, useArt, useLinkGen } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Artist, type Genre, type Playlist } from '../jellyfin';
 import type { LibTab, ViewProps } from '../nav';
@@ -18,6 +18,16 @@ const LIB_PAGE = 120;
 const scrollTops = new Map<LibTab, number>();
 const lastFullLoad = new Map<LibTab, number>();
 const FRESH_MS = 5 * 60 * 1000;
+
+function SkeletonGrid() {
+  return (
+    <div className="grid grid-cols-3 gap-x-4 gap-y-6" aria-hidden>
+      {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+        <SkeletonGridCard key={i} />
+      ))}
+    </div>
+  );
+}
 
 const TABS: { id: LibTab; label: string }[] = [
   { id: 'playlists', label: 'Playlists' },
@@ -234,9 +244,9 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
         ) : tab === 'albums' ? (
           albums ? (
             <>
-              <div className="flex flex-wrap gap-4">
+              <div className="grid grid-cols-3 gap-x-4 gap-y-6">
                 {albums.map(a => (
-                  <Tile
+                  <GridCard
                     key={a.id}
                     title={a.name}
                     subtitle={a.artist}
@@ -249,14 +259,14 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
               {loadingMore && <p className="mt-4 text-center text-sm text-white/40">Loading more…</p>}
             </>
           ) : (
-            <Spinner />
+            <SkeletonGrid />
           )
         ) : tab === 'artists' ? (
           artists ? (
             <>
-              <div className="flex flex-wrap gap-4">
+              <div className="grid grid-cols-3 gap-x-4 gap-y-6">
                 {artists.map(a => (
-                  <Tile
+                  <GridCard
                     key={a.id}
                     title={a.name}
                     art={art?.artistArt(a) ?? null}
@@ -273,13 +283,13 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
               {loadingMore && <p className="mt-4 text-center text-sm text-white/40">Loading more…</p>}
             </>
           ) : (
-            <Spinner />
+            <SkeletonGrid />
           )
         ) : tab === 'playlists' ? (
           playlists ? (
-            <div className="flex flex-wrap gap-4">
+            <div className="grid grid-cols-3 gap-x-4 gap-y-6">
               {playlists.map(p => (
-                <Tile
+                <GridCard
                   key={p.id}
                   title={p.name}
                   subtitle={p.songCount ? `${p.songCount} tracks` : undefined}
@@ -290,7 +300,7 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
               ))}
             </div>
           ) : (
-            <Spinner />
+            <SkeletonGrid />
           )
         ) : genres ? (
           <div className="flex flex-wrap gap-3">
@@ -299,7 +309,7 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
                 key={g.id}
                 type="button"
                 onClick={() => nav({ name: 'detail', kind: 'genre', id: g.id, title: g.name })}
-                className="h-20 shrink-0 rounded-2xl bg-white/10 px-6 text-2xl font-medium active:bg-white/20"
+                className="h-20 shrink-0 rounded-3xl bg-white/10 px-6 text-2xl font-medium active:bg-white/20"
               >
                 {g.name}
               </button>
