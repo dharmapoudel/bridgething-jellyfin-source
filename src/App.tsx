@@ -18,16 +18,19 @@ const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | '
   { view: { name: 'queue' }, icon: 'queue', label: 'Queue' },
 ];
 
-// o-music-style top tab strip: each tab is a 2px line (touching the very top
-// of the screen) with its label below it, like o-music's COVER label. The
-// bottom nav bar is gone to reclaim vertical space. The tab's icon is revealed
-// only while the button is pressed: it drops down under the line, then slides
-// back up and hides when the press is lifted. The active tab is shown by its
-// leaf-green line and bright label.
+// o-music-style top tab strip: each tab's 2px line sits directly below its
+// hardware preset button, the way o-music's tick marks do. Button centers were
+// measured from device photos at 15.2% / 39.0% / 64.6% of screen width
+// (4th button at 88.1%, unused for now). The label sits under its line, like
+// o-music's COVER. The bottom nav bar is gone to reclaim vertical space. The
+// tab's icon is revealed only while the button is pressed: it drops down under
+// the line, then slides back up and hides when the press is lifted. The active
+// tab is shown by its leaf-green line and bright label.
+const TAB_X = ['15.2%', '39.0%', '64.6%']; // hardware preset button centers, % of screen width
 function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
   const activeIdx = view.name === 'home' ? 0 : view.name === 'queue' ? 2 : 1;
   return (
-    <div className="flex shrink-0 items-stretch border-b border-white/10 px-3">
+    <div className="relative h-[30px] shrink-0 border-b border-white/10 transition-all duration-300 active:h-[60px]">
       {NAV_ITEMS.map((item, i) => {
         const active = i === activeIdx;
         return (
@@ -36,9 +39,11 @@ function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
             type="button"
             aria-pressed={active}
             onClick={() => onNav(item.view)}
-            className="group flex flex-1 flex-col items-center justify-start px-2 pb-2 active:bg-white/5"
+            style={{ left: TAB_X[i] }}
+            className="group absolute top-0 flex w-[22%] -translate-x-1/2 flex-col items-center px-2 pb-2 active:bg-white/5"
           >
-            {/* the line, touching the very top of the screen */}
+            {/* the line, touching the very top of the screen, centered
+                directly below its hardware preset button */}
             <div
               className={`h-[2px] rounded-full transition-all duration-300 ${
                 active ? 'w-12 bg-leaf' : 'w-8 bg-white/20'
