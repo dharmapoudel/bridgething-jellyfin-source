@@ -364,7 +364,7 @@ const PATHS: Record<string, string> = {
   playlist:
     'M3 6h8v2H3zM3 10.5h8v2H3zM3 15h5v2H3zM16 4v10.55A4 4 0 1 0 18 18V8h4V4h-6z',
   album:
-    'M5 8a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v2H5V8zm0 4h15v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7z',
+    'M8 11a4 4 0 1 1 8 0a4 4 0 1 1-8 0zM7 10h10a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V12a2 2 0 0 1 2-2z',
   plus: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
   x: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
   back: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
@@ -584,6 +584,35 @@ export function AuthError({ text, onReconnect }: { text: string; onReconnect: ()
 }
 
 // ---- tiles & rows ----
+
+// Horizontal rail section: small-caps title, optional gold "See all", scroll row.
+export function Rail({
+  title,
+  onSeeAll,
+  children,
+}: {
+  title: string;
+  onSeeAll?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-7 shrink-0">
+      <div className="mb-3 flex items-center justify-between px-5">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.22em] text-white/80">{title}</h2>
+        {onSeeAll ? (
+          <button
+            type="button"
+            onClick={onSeeAll}
+            className="rounded-full px-4 py-2 text-lg font-medium text-goldlight active:bg-white/10"
+          >
+            See all
+          </button>
+        ) : null}
+      </div>
+      <div className="flex gap-4 overflow-x-auto px-5 pb-1">{children}</div>
+    </section>
+  );
+}
 
 export function Tile({
   title,

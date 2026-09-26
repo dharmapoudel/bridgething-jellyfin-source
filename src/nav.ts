@@ -1,11 +1,12 @@
 // in-app navigation. single full-screen page; views swap, Escape/back pops.
-export type LibTab = 'albums' | 'artists' | 'playlists' | 'genres';
-
 export type View =
   | { name: 'home' }
-  | { name: 'library'; tab: LibTab }
+  | { name: 'library' }
   | { name: 'playlists' }
   | { name: 'albums' }
+  | { name: 'artists' }
+  | { name: 'genres' }
+  | { name: 'albumlist'; kind: 'favorites' | 'recent' }
   | { name: 'favorites' }
   | { name: 'detail'; kind: 'album' | 'artist' | 'playlist' | 'genre'; id: string; title: string }
   | { name: 'nowplaying' }

@@ -1,0 +1,171 @@
+import { useMemo } from 'react';
+import { albumActions } from '../actions';
+import { GridCard, Rail, Tile, TopBar, useArt } from '../components';
+import { type Album, type Track } from '../jellyfin';
+import type { ViewProps } from '../nav';
+import {
+  ListError,
+  RAIL_N,
+  RailSkeleton,
+  SkeletonGrid,
+  useBounded,
+  usePagedList,
+  useScrollKeepAlive,
+} from './listkit';
+
+// Recently-played albums: Jellyfin reports recent tracks, so dedupe them on
+// albumId (order = most recent first).
+function albumsFromTracks(tracks: Track[]): Album[] {
+  const seen = new Set<string>();
+  const out: Album[] = [];
+  for (const t of tracks) {
+    if (!t.albumId || seen.has(t.albumId)) continue;
+    seen.add(t.albumId);
+    out.push({
+      id: t.albumId,
+      name: t.album || 'Unknown album',
+      artist: t.artist,
+      year: null,
+      songCount: 0,
+      imageTag: t.albumImageTag,
+      isFavorite: false,
+    });
+  }
+  return out;
+}
+
+// Albums tab: Favorite albums rail, Recently played rail, then the full
+// All albums grid — all in the Recent-tracks rail design language.
+export default function AlbumsHome({ jf, nav, openMenu }: ViewProps) {
+  const art = useArt();
+  const favs = useBounded<Album>('albums:favs', () => jf.favoriteAlbums(RAIL_N));
+  const recentTracks = useBounded<Track>('albums:recent-tracks', () => jf.recentlyPlayedTracks(60));
+  const albums = usePagedList<Album>('lib:albums', (s, l) => jf.albums(s, l));
+  const recentAlbums = useMemo(
+    () => (recentTracks.data ? albumsFromTracks(recentTracks.data) : null),
+    [recentTracks.data],
+  );
+  const scroll = useScrollKeepAlive('albums', !!albums.data || !!favs.data || !!recentAlbums);
+  const err = favs.error ?? recentTracks.error ?? albums.error;
+  const rawErr = favs.error ? favs.rawError : recentTracks.error ? recentTracks.rawError : albums.rawError;
+
+  const retryAll = () => {
+    favs.retry();
+    recentTracks.retry();
+    albums.retry();
+  };
+
+  const albumTile = (a: Album) => (
+    <Tile
+      key={a.id}
+      size={140}
+      title={a.name}
+      subtitle={a.artist || undefined}
+      art={art?.albumArt(a) ?? null}
+      onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
+      onMenu={() => openMenu(a.name, albumActions(a, jf, nav))}
+    />
+  );
+
+  return (
+    <div className="flex h-full flex-col">
+      <div ref={scroll.ref} onScroll={scroll.onScroll} className="min-h-0 flex-1 overflow-y-auto py-3">
+        {err ? (
+          <ListError error={err} rawError={rawErr} onRetry={retryAll} what="albums" nav={nav} />
+        ) : (
+          <>
+            {favs.data ? (
+              favs.data.length > 0 ? (
+                <Rail title="Favorite albums" onSeeAll={() => nav({ name: 'albumlist', kind: 'favorites' })}>
+                  {favs.data.map(albumTile)}
+                </Rail>
+              ) : null
+            ) : (
+              <RailSkeleton />
+            )}
+            {recentAlbums ? (
+              recentAlbums.length > 0 ? (
+                <Rail title="Recently played" onSeeAll={() => nav({ name: 'albumlist', kind: 'recent' })}>
+                  {recentAlbums.slice(0, RAIL_N).map(albumTile)}
+                </Rail>
+              ) : null
+            ) : (
+              <RailSkeleton />
+            )}
+            <section className="px-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-white/80">All albums</h2>
+              {albums.data ? (
+                <>
+                  <div className="grid grid-cols-3 gap-x-4 gap-y-6">
+                    {albums.data.map(a => (
+                      <GridCard
+                        key={a.id}
+                        title={a.name}
+                        subtitle={a.artist}
+                        art={art?.albumArt(a) ?? null}
+                        onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
+                        onMenu={() => openMenu(a.name, albumActions(a, jf, nav))}
+                      />
+                    ))}
+                  </div>
+                  {albums.loadingMore && (
+                    <p className="mt-4 text-center text-sm text-white/40">Loading more…</p>
+                  )}
+                </>
+              ) : (
+                <SkeletonGrid />
+              )}
+            </section>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// See-all destination for the Favorite albums / Recently played rails.
+export function AlbumListView({
+  jf,
+  nav,
+  back,
+  openMenu,
+  kind,
+}: ViewProps & { kind: 'favorites' | 'recent' }) {
+  const art = useArt();
+  const title = kind === 'favorites' ? 'Favorite albums' : 'Recently played';
+  const list = useBounded<Album>(
+    `albums:${kind}:all`,
+    () =>
+      kind === 'favorites'
+        ? jf.favoriteAlbums(200)
+        : jf.recentlyPlayedTracks(200).then(albumsFromTracks),
+  );
+  const scroll = useScrollKeepAlive(`albumlist:${kind}`, !!list.data);
+  const { data, error, rawError, retry } = list;
+
+  return (
+    <div className="flex h-full flex-col">
+      <TopBar title={title} onBack={back} />
+      <div ref={scroll.ref} onScroll={scroll.onScroll} className="min-h-0 flex-1 overflow-y-auto p-4">
+        {error ? (
+          <ListError error={error} rawError={rawError} onRetry={retry} what={title.toLowerCase()} nav={nav} />
+        ) : data ? (
+          <div className="grid grid-cols-3 gap-x-4 gap-y-6">
+            {data.map(a => (
+              <GridCard
+                key={a.id}
+                title={a.name}
+                subtitle={a.artist}
+                art={art?.albumArt(a) ?? null}
+                onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
+                onMenu={() => openMenu(a.name, albumActions(a, jf, nav))}
+              />
+            ))}
+          </div>
+        ) : (
+          <SkeletonGrid />
+        )}
+      </div>
+    </div>
+  );
+}

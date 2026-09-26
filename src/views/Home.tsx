@@ -6,6 +6,7 @@ import {
   Artwork,
   AuthError,
   Empty,
+  Rail,
   Rise,
   SkeletonRow,
   SkeletonTile,
@@ -57,22 +58,6 @@ function useLoad<T>(key: string | null, load: () => Promise<T>): {
   return { data, error, rawError };
 }
 
-function Rail({ title, onSeeAll, children }: { title: string; onSeeAll?: () => void; children: React.ReactNode }) {
-  return (
-    <section className="mb-7 shrink-0">
-      <div className="mb-3 flex items-center justify-between px-5">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.22em] text-white/80">{title}</h2>
-        {onSeeAll ? (
-          <button type="button" onClick={onSeeAll} className="rounded-full px-4 py-2 text-lg font-medium text-goldlight active:bg-white/10">
-            See all
-          </button>
-        ) : null}
-      </div>
-      <div className="flex gap-4 overflow-x-auto px-5 pb-1">{children}</div>
-    </section>
-  );
-}
-
 function SkeletonHome() {
   return (
     <div className="py-2" aria-hidden>
@@ -81,7 +66,7 @@ function SkeletonHome() {
           <div className="skeleton mx-5 mb-2 h-4 w-40 rounded" />
           <div className="flex gap-4 overflow-hidden px-5">
             {[0, 1, 2, 3].map(i => (
-              <SkeletonTile key={i} size={180} />
+              <SkeletonTile key={i} size={140} />
             ))}
           </div>
         </section>
@@ -154,7 +139,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
                 return (
                   <Rise key={t.id} i={i}>
                     <Tile
-                      size={120}
+                      size={140}
                       title={t.name}
                       subtitle={t.artist}
                       art={art?.trackArt(t) ?? null}
@@ -222,7 +207,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
                 return (
                   <Rise key={t.id} i={i}>
                     <Tile
-                      size={120}
+                      size={140}
                       title={t.name}
                       subtitle={t.artist}
                       art={art?.trackArt(t) ?? null}

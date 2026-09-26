@@ -17,7 +17,8 @@ import type { View } from './nav';
 import Detail from './views/Detail';
 import Favorites from './views/Favorites';
 import Home from './views/Home';
-import Library from './views/Library';
+import AlbumsHome, { AlbumListView } from './views/Albums';
+import Library, { ArtistsAll, GenresAll, PlaylistsAll } from './views/Library';
 import NowPlaying from './views/NowPlaying';
 import { QueueHandle, QueueSheet } from './QueueSheet';
 import Queue from './views/Queue';
@@ -31,7 +32,7 @@ const CACHE_CLEAR_HANDLED = 'finch:cache_clear_handled';
 
 const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'playlist' | 'album'; label: string }[] = [
   { view: { name: 'home' }, icon: 'home', label: 'Home' },
-  { view: { name: 'library', tab: 'artists' }, icon: 'library', label: 'Library' },
+  { view: { name: 'library' }, icon: 'library', label: 'Library' },
   { view: { name: 'playlists' }, icon: 'playlist', label: 'Playlists' },
   { view: { name: 'albums' }, icon: 'album', label: 'Albums' },
 ];
@@ -64,18 +65,18 @@ function TopTabs({
   const activeIdx =
     view.name === 'home'
       ? 0
-      : view.name === 'library'
+      : view.name === 'library' || view.name === 'artists' || view.name === 'genres'
         ? 1
         : view.name === 'playlists'
           ? 2
-          : view.name === 'albums'
+          : view.name === 'albums' || view.name === 'albumlist'
             ? 3
             : view.name === 'favorites'
               ? 0
               : view.name === 'detail'
                 ? parentName === 'playlists'
                   ? 2
-                  : parentName === 'albums'
+                  : parentName === 'albums' || parentName === 'albumlist'
                     ? 3
                     : 1
                 : 1;
@@ -329,7 +330,7 @@ export default function App() {
     if (
       v.name === 'nowplaying' &&
       cur.name !== 'nowplaying' &&
-      (cur.name === 'home' || cur.name === 'library' || cur.name === 'playlists' || cur.name === 'albums' || cur.name === 'queue')
+      (cur.name === 'home' || cur.name === 'library' || cur.name === 'playlists' || cur.name === 'albums' || cur.name === 'artists' || cur.name === 'genres' || cur.name === 'albumlist' || cur.name === 'queue')
     ) {
       returnViewRef.current = cur;
     }
@@ -433,7 +434,7 @@ export default function App() {
       // press never gives the on-screen button a CSS :active.
       if (v.name === 'setup') return;
       if (e.key === '1') pressTab(0, { name: 'home' });
-      else if (e.key === '2') pressTab(1, { name: 'library', tab: 'artists' });
+      else if (e.key === '2') pressTab(1, { name: 'library' });
       else if (e.key === '3') pressTab(2, { name: 'playlists' });
       else if (e.key === '4') pressTab(3, { name: 'albums' });
     };
@@ -489,11 +490,17 @@ export default function App() {
       case 'home':
         return <Home {...props} />;
       case 'library':
-        return <Library {...props} initialTab={view.tab} />;
+        return <Library {...props} />;
+      case 'artists':
+        return <ArtistsAll {...props} />;
+      case 'genres':
+        return <GenresAll {...props} />;
       case 'playlists':
-        return <Library {...props} initialTab="playlists" hideTabBar />;
+        return <PlaylistsAll {...props} />;
       case 'albums':
-        return <Library {...props} initialTab="albums" hideTabBar />;
+        return <AlbumsHome {...props} />;
+      case 'albumlist':
+        return <AlbumListView {...props} kind={view.kind} />;
       case 'favorites':
         return <Favorites {...props} />;
       case 'detail':

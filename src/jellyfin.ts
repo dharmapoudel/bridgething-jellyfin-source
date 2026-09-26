@@ -456,6 +456,17 @@ export class JellyfinClient {
     );
   }
 
+  favoriteAlbums(limit = 50): Promise<Album[]> {
+    return this.items(
+      JellyfinClient.bounded(
+        { Filters: 'IsFavorite', IncludeItemTypes: 'MusicAlbum', SortBy: 'SortName' },
+        0,
+        limit,
+      ),
+      normalizeAlbum,
+    );
+  }
+
   async toggleFavorite(itemId: string, favorite: boolean): Promise<void> {
     const path = `/Users/${this.creds.userId}/FavoriteItems/${itemId}`;
     await this.request<void>(favorite ? 'POST' : 'DELETE', path);
