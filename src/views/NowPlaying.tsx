@@ -217,9 +217,9 @@ function InfoPanel({
       />
       <div className="relative flex min-h-0 flex-1 flex-col px-5 py-4">
         <div className="flex min-h-0 flex-1 flex-col gap-5">
-          {/* the track takes the space above; the seek bar + controls hold
-              the bottom edge */}
-          <div className="flex min-h-0 flex-1 flex-col justify-between gap-4 py-1">
+          {/* the track takes the space above (clock, then titles right under
+              it); the seek bar + controls hold the bottom edge */}
+          <div className="flex min-h-0 flex-1 flex-col gap-4 py-1">
             <div className="flex shrink-0 justify-start">
               <Clock />
             </div>

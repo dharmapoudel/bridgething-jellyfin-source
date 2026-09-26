@@ -214,3 +214,6 @@
 
 ## 0.1.46
 - Now Playing layout revision: the seek bar moves down to sit just above the controls, and the single transport row (lyrics left of previous, heart right of next) sits at the bottom edge where the old lyrics+heart row was.
+
+## 0.1.47
+- Now Playing: the song title + artist section stays put right under the clock — no longer pushed down toward the seek bar. The space between the titles and the bottom-anchored seek/controls cluster is just empty.
