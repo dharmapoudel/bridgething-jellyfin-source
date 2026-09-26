@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { albumActions, playlistActions } from '../actions';
 import { cached, stickyGet, stickySet } from '../cache';
-import { AuthError, Empty, Spinner, Tile, friendlyError, useArt, useLinkGen } from '../components';
+import { AuthError, Empty, GridCard, Rise, SkeletonGridCard, friendlyError, useArt, useLinkGen } from '../components';
 import { player } from '../player';
 import { isAuthError, type Album, type Artist, type Genre, type Playlist } from '../jellyfin';
 import type { LibTab, ViewProps } from '../nav';
@@ -203,17 +203,18 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-white/10 p-3">
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-white/10 px-3">
         {TABS.map(t => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`h-14 shrink-0 rounded-full px-6 text-xl font-medium ${
-              tab === t.id ? 'bg-leaf text-black' : 'bg-white/10 text-white/80 active:bg-white/20'
+            className={`relative h-14 shrink-0 px-5 text-xl font-semibold ${
+              tab === t.id ? 'text-leaf' : 'text-white/55 active:text-white'
             }`}
           >
             {t.label}
+            {tab === t.id ? <span className="absolute inset-x-4 bottom-0 h-[3px] rounded-full bg-leaf" /> : null}
           </button>
         ))}
       </div>
@@ -233,10 +234,10 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
           )
         ) : tab === 'albums' ? (
           albums ? (
-            <>
-              <div className="flex flex-wrap gap-4">
+            <Rise>
+              <div className="grid grid-cols-3 gap-x-4 gap-y-6">
                 {albums.map(a => (
-                  <Tile
+                  <GridCard
                     key={a.id}
                     title={a.name}
                     subtitle={a.artist}
@@ -246,17 +247,21 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
                   />
                 ))}
               </div>
-              {loadingMore && <p className="mt-4 text-center text-sm text-white/40">Loading more…</p>}
-            </>
+              {loadingMore && <p className="mt-4 text-center text-base text-white/40">Loading more…</p>}
+            </Rise>
           ) : (
-            <Spinner />
+            <div className="grid grid-cols-3 gap-x-4 gap-y-6" aria-hidden>
+              {Array.from({ length: 9 }, (_, i) => (
+                <SkeletonGridCard key={i} />
+              ))}
+            </div>
           )
         ) : tab === 'artists' ? (
           artists ? (
-            <>
-              <div className="flex flex-wrap gap-4">
+            <Rise>
+              <div className="grid grid-cols-3 gap-x-4 gap-y-6">
                 {artists.map(a => (
-                  <Tile
+                  <GridCard
                     key={a.id}
                     title={a.name}
                     art={art?.artistArt(a) ?? null}
@@ -270,27 +275,37 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
                   />
                 ))}
               </div>
-              {loadingMore && <p className="mt-4 text-center text-sm text-white/40">Loading more…</p>}
-            </>
+              {loadingMore && <p className="mt-4 text-center text-base text-white/40">Loading more…</p>}
+            </Rise>
           ) : (
-            <Spinner />
+            <div className="grid grid-cols-3 gap-x-4 gap-y-6" aria-hidden>
+              {Array.from({ length: 9 }, (_, i) => (
+                <SkeletonGridCard key={i} />
+              ))}
+            </div>
           )
         ) : tab === 'playlists' ? (
           playlists ? (
-            <div className="flex flex-wrap gap-4">
-              {playlists.map(p => (
-                <Tile
-                  key={p.id}
-                  title={p.name}
-                  subtitle={p.songCount ? `${p.songCount} tracks` : undefined}
-                  art={art?.playlistArt(p) ?? null}
-                  onClick={() => nav({ name: 'detail', kind: 'playlist', id: p.id, title: p.name })}
-                  onMenu={() => openMenu(p.name, playlistActions(p, jf, nav))}
-                />
+            <Rise>
+              <div className="grid grid-cols-3 gap-x-4 gap-y-6">
+                {playlists.map(p => (
+                  <GridCard
+                    key={p.id}
+                    title={p.name}
+                    subtitle={p.songCount ? `${p.songCount} tracks` : undefined}
+                    art={art?.playlistArt(p) ?? null}
+                    onClick={() => nav({ name: 'detail', kind: 'playlist', id: p.id, title: p.name })}
+                    onMenu={() => openMenu(p.name, playlistActions(p, jf, nav))}
+                  />
+                ))}
+              </div>
+            </Rise>
+          ) : (
+            <div className="grid grid-cols-3 gap-x-4 gap-y-6" aria-hidden>
+              {Array.from({ length: 9 }, (_, i) => (
+                <SkeletonGridCard key={i} />
               ))}
             </div>
-          ) : (
-            <Spinner />
           )
         ) : genres ? (
           <div className="flex flex-wrap gap-3">
@@ -306,7 +321,11 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
             ))}
           </div>
         ) : (
-          <Spinner />
+          <div className="flex flex-wrap gap-3" aria-hidden>
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="skeleton h-20 w-40 rounded-2xl" />
+            ))}
+          </div>
         )}
       </div>
     </div>

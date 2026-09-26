@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getClient } from './client';
-import { ArtCtx, Icon, useMenu, usePlayer, usePortrait, type ArtResolver, type MenuAction } from './components';
+import { ArtCtx, Icon, MiniPlayer, useMenu, usePlayer, usePortrait, type ArtResolver, type MenuAction } from './components';
 import { JellyfinClient, type Creds } from './jellyfin';
 import { player } from './player';
 import type { View } from './nav';
@@ -8,7 +8,6 @@ import Detail from './views/Detail';
 import Home from './views/Home';
 import Library from './views/Library';
 import NowPlaying from './views/NowPlaying';
-import { QueueHandle, QueueSheet } from './QueueSheet';
 import Queue from './views/Queue';
 import Setup, { CREDS_KEY, type StoredCreds } from './views/Setup';
 
@@ -61,7 +60,6 @@ export default function App() {
   const [credsState, setCredsState] = useState<'loading' | 'missing' | 'ready'>('loading');
   const [jf, setJf] = useState<JellyfinClient | null>(null);
   const [stack, setStack] = useState<View[]>([{ name: 'home' }]);
-  const [queueOpen, setQueueOpen] = useState(false);
   const [daemonUp, setDaemonUp] = useState(true);
   const menu = useMenu();
   usePlayer();
@@ -165,7 +163,7 @@ export default function App() {
   }, [load]);
 
   const nav = useCallback((v: View) => {
-    // bottom-nav destinations replace the stack; drill-ins push
+    // tab destinations replace the stack; drill-ins push
     const cur = viewRef.current;
     // The stack is replaced (not pushed) when opening Now Playing, so
     // remember where it was opened from to minimize back to it.
@@ -242,6 +240,7 @@ export default function App() {
       if (v.name === 'setup') return;
       if (e.key === '1') nav({ name: 'home' });
       else if (e.key === '2') nav({ name: 'library', tab: 'playlists' });
+      else if (e.key === '3') nav({ name: 'queue' });
       else if (e.key === '4') nav({ name: 'nowplaying' });
     };
     const onWheel = (e: WheelEvent): void => {
@@ -303,6 +302,10 @@ export default function App() {
 
   const showChrome = credsState === 'ready' && view.name !== 'nowplaying';
   const current = player.current();
+  // Remount the view container on navigation so the view transition
+  // replays. Library tab switches are internal state (kept alive across
+  // drill-ins); drill-ins animate.
+  const viewKey = view.name === 'detail' ? `detail:${view.id}` : view.name;
 
   return (
     <ArtCtx.Provider value={artResolver}>
@@ -312,41 +315,41 @@ export default function App() {
             Lost connection to the device. Reconnect to continue.
           </div>
         ) : null}
-        <div className="relative min-h-0 flex-1">{renderView()}</div>
-        {/* Queue bar on every screen while a song is playing; the mini player is gone. */}
-        {current ? <QueueHandle onOpen={() => setQueueOpen(true)} /> : null}
-        {queueOpen ? (
-          <QueueSheet
-            onClose={() => setQueueOpen(false)}
-            onOpenNowPlaying={() => {
-              setQueueOpen(false);
-              nav({ name: 'nowplaying' });
-            }}
-          />
-        ) : null}
         {showChrome ? (
-          // In portrait the physical knob overlaps the bottom-right corner, so
-          // the nav floats above it instead of sitting flush at the bottom.
-          <nav className={`flex h-20 shrink-0 items-stretch border-t border-white/10 bg-zinc-950 ${portrait ? 'mb-14' : ''}`}>
+          <nav className="flex h-16 shrink-0 items-stretch border-b border-white/10 bg-zinc-950 px-2">
             {NAV_ITEMS.map(item => {
               const active =
                 view.name === item.view.name ||
-                (item.view.name === 'library' && view.name === 'library');
+                (item.view.name === 'library' && (view.name === 'library' || view.name === 'detail'));
               return (
                 <button
                   key={item.label}
                   type="button"
                   onClick={() => nav(item.view)}
-                  className={`flex flex-1 flex-col items-center justify-center gap-1 ${
+                  className={`relative flex flex-1 items-center justify-center gap-2.5 ${
                     active ? 'text-leaf' : 'text-white/55 active:bg-white/10'
                   }`}
                 >
-                  <Icon name={item.icon} size={30} />
-                  {portrait ? <span className="text-base leading-none">{item.label}</span> : null}
+                  <Icon name={item.icon} size={26} />
+                  <span className="text-xl font-semibold">{item.label}</span>
+                  {active ? <span className="absolute inset-x-10 bottom-0 h-1 rounded-full bg-leaf" /> : null}
                 </button>
               );
             })}
           </nav>
+        ) : null}
+        <div className="relative min-h-0 flex-1">
+          <div key={viewKey} className="h-full animate-view">
+            {renderView()}
+          </div>
+        </div>
+        {/* Persistent mini-player strip on every screen while playing. */}
+        {showChrome && current ? (
+          // In portrait the physical knob overlaps the bottom-right corner,
+          // so the strip floats above it instead of sitting flush.
+          <div className={portrait ? 'mb-14' : ''}>
+            <MiniPlayer onOpen={() => nav({ name: 'nowplaying' })} />
+          </div>
         ) : null}
         {menu.sheet}
       </div>

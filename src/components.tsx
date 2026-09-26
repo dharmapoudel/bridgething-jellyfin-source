@@ -371,11 +371,15 @@ export function Artwork({
   size,
   rounded = 'rounded-xl',
   label = '',
+  fluid = false,
 }: {
   src: string | null;
   size: number;
   rounded?: string;
   label?: string;
+  // fluid: fill the parent (aspect-square) instead of a fixed px box; `size`
+  // still picks the fetched image width. Used by grid cards.
+  fluid?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
@@ -404,7 +408,11 @@ export function Artwork({
   }, []);
   const { url, failed } = useCachedArt(near ? src : null);
   return (
-    <div ref={ref} className="shrink-0" style={{ width: size, height: size }}>
+    <div
+      ref={ref}
+      className={fluid ? 'aspect-square w-full' : 'shrink-0'}
+      style={fluid ? undefined : { width: size, height: size }}
+    >
       {!src || failed || !url ? (
         <div
           className={`flex h-full w-full items-center justify-center bg-white/8 text-white/25 ${rounded}`}
@@ -465,7 +473,7 @@ export function IconBtn({
 
 export function TopBar({ title, onBack, right }: { title: string; onBack?: () => void; right?: ReactNode }) {
   return (
-    <div className="flex h-20 shrink-0 items-center gap-3 border-b border-white/10 px-4">
+    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-4">
       {onBack ? (
         <IconBtn onClick={onBack} label="Back" size={56}>
           <Icon name="back" size={30} />
@@ -530,6 +538,53 @@ export function Tile({
   onClick,
   onMenu,
   active,
+  size = 160,
+}: {
+  title: string;
+  subtitle?: string;
+  art: string | null;
+  onClick: () => void;
+  onMenu?: () => void;
+  active?: boolean;
+  // rail tile art width in px (rails show ~3 across at 200px on 800px wide)
+  size?: number;
+}) {
+  return (
+    <div className="relative shrink-0" style={{ width: size }}>
+      <button type="button" onClick={onClick} className="block w-full text-left active:opacity-80">
+        <div className={active ? 'rounded-2xl ring-2 ring-leaf ring-offset-2 ring-offset-black' : undefined}>
+          <Artwork src={art} size={size} rounded="rounded-2xl" label={title} />
+        </div>
+        <div className={`mt-2 truncate text-xl leading-tight font-semibold ${active ? 'text-leaf' : ''}`}>
+          {title}
+        </div>
+        {subtitle ? <div className="truncate text-lg leading-tight text-white/50">{subtitle}</div> : null}
+      </button>
+      {onMenu ? (
+        <button
+          type="button"
+          aria-label={`More options for ${title}`}
+          onClick={e => {
+            e.stopPropagation();
+            onMenu();
+          }}
+          className="absolute top-1 right-1 flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white/90 active:bg-black/80"
+        >
+          <Icon name="dots" size={26} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+// Full-width card for the 3-column library grid: art fills the column.
+export function GridCard({
+  title,
+  subtitle,
+  art,
+  onClick,
+  onMenu,
+  active,
 }: {
   title: string;
   subtitle?: string;
@@ -539,12 +594,14 @@ export function Tile({
   active?: boolean;
 }) {
   return (
-    <div className="relative w-40 shrink-0">
+    <div className="relative min-w-0">
       <button type="button" onClick={onClick} className="block w-full text-left active:opacity-80">
-        <div className={active ? 'rounded-xl ring-2 ring-leaf ring-offset-2 ring-offset-black' : undefined}>
-          <Artwork src={art} size={160} label={title} />
+        <div className={active ? 'rounded-2xl ring-2 ring-leaf ring-offset-2 ring-offset-black' : undefined}>
+          <Artwork fluid src={art} size={480} rounded="rounded-2xl" label={title} />
         </div>
-        <div className={`mt-2 truncate text-lg leading-tight font-medium ${active ? 'text-leaf' : ''}`}>{title}</div>
+        <div className={`mt-2 truncate text-xl leading-tight font-semibold ${active ? 'text-leaf' : ''}`}>
+          {title}
+        </div>
         {subtitle ? <div className="truncate text-base leading-tight text-white/50">{subtitle}</div> : null}
       </button>
       {onMenu ? (
@@ -583,42 +640,124 @@ export function TrackRow({
   const active = player.current()?.id === track.id;
   return (
     <div
-      className={`flex min-h-16 items-center gap-3 rounded-xl px-2 py-2 ${active ? 'bg-leaf/10' : 'active:bg-white/8'}`}
+      className={`flex min-h-[72px] items-center gap-3 rounded-2xl px-3 py-2 ${
+        active ? 'bg-leaf/10' : 'active:bg-white/8'
+      }`}
     >
+      {/* one play affordance: the whole row. The old separate play circle
+          made every row carry two competing tap targets. */}
       <button type="button" onClick={onPlay} className="flex min-w-0 flex-1 items-center gap-3 text-left">
         {showArt ? (
-          <Artwork src={art} size={56} rounded="rounded-lg" label={track.album} />
+          <Artwork src={art} size={56} rounded="rounded-xl" label={track.album} />
         ) : indexLabel ? (
-          <span className="w-10 shrink-0 text-center text-xl text-white/40">{indexLabel}</span>
+          <span className="w-8 shrink-0 text-center text-xl tabular-nums text-white/40">{indexLabel}</span>
         ) : null}
         <span className="min-w-0 flex-1">
-          <span className={`block truncate text-xl leading-tight ${active ? 'text-leaf' : ''}`}>
+          <span className={`block truncate text-xl leading-snug font-medium ${active ? 'text-leaf' : ''}`}>
             {track.name}
           </span>
-          <span className="block truncate text-base leading-tight text-white/50">
+          <span className="block truncate text-base leading-snug text-white/50">
             {track.artist} {track.album ? `· ${track.album}` : ''}
           </span>
         </span>
-        <span className="shrink-0 text-base text-white/40">{fmtTime(track.durationMs)}</span>
-      </button>
-      <button
-        type="button"
-        aria-label={`Play ${track.name}`}
-        onClick={onPlay}
-        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white/70 active:bg-white/15"
-      >
-        <Icon name={active && player.intentPlaying ? 'pause' : 'play'} size={30} />
+        <span className="shrink-0 text-base tabular-nums text-white/40">{fmtTime(track.durationMs)}</span>
       </button>
       {onMenu ? (
         <button
           type="button"
           aria-label={`More options for ${track.name}`}
           onClick={onMenu}
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white/70 active:bg-white/15"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white/70 active:bg-white/15"
         >
           <Icon name="dots" size={28} />
         </button>
       ) : null}
+    </div>
+  );
+}
+
+// ---- motion: stagger + skeletons (1.0.11) ----
+
+// Staggered entrance: each Rise'd child fades/slides in 45ms after the
+// previous one (capped at 8 so long lists don't cascade forever).
+export function Rise({ i = 0, className = '', children }: { i?: number; className?: string; children: ReactNode }) {
+  return (
+    <div className={`animate-rise ${className}`} style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }}>
+      {children}
+    </div>
+  );
+}
+
+export function SkeletonTile({ size = 200 }: { size?: number }) {
+  return (
+    <div className="shrink-0" style={{ width: size }} aria-hidden>
+      <div className="skeleton aspect-square w-full rounded-2xl" />
+      <div className="skeleton mt-2 h-6 w-3/4 rounded-md" />
+      <div className="skeleton mt-1.5 h-5 w-1/2 rounded-md" />
+    </div>
+  );
+}
+
+export function SkeletonGridCard() {
+  return (
+    <div className="min-w-0" aria-hidden>
+      <div className="skeleton aspect-square w-full rounded-2xl" />
+      <div className="skeleton mt-2 h-6 w-3/4 rounded-md" />
+      <div className="skeleton mt-1.5 h-5 w-1/2 rounded-md" />
+    </div>
+  );
+}
+
+export function SkeletonRow() {
+  return (
+    <div className="flex min-h-[72px] items-center gap-3 px-3 py-2" aria-hidden>
+      <div className="skeleton h-14 w-14 shrink-0 rounded-xl" />
+      <div className="min-w-0 flex-1">
+        <div className="skeleton h-6 w-2/3 rounded-md" />
+        <div className="skeleton mt-1.5 h-5 w-1/3 rounded-md" />
+      </div>
+    </div>
+  );
+}
+
+// Persistent mini-player strip: the Car Thing pattern. Sits at the bottom
+// of every screen while something is playing; tapping it opens Now Playing.
+export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
+  usePlayer();
+  const art = useArt();
+  const [, tick] = useState(0);
+  const t = player.current();
+  const trackId = t?.id;
+  useEffect(() => {
+    if (!trackId) return;
+    const id = window.setInterval(() => tick(n => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [trackId]);
+  if (!t) return null;
+  const dur = player.trackDurationMs;
+  const ratio = dur > 0 ? Math.min(1, Math.max(0, player.positionNow() / dur)) : 0;
+  return (
+    <div className="relative h-[76px] shrink-0 border-t border-white/10 bg-zinc-900/95 backdrop-blur">
+      <div className="absolute inset-x-0 top-0 h-[3px] bg-white/10" aria-hidden>
+        <div className="h-full bg-leaf transition-[width] duration-1000 ease-linear" style={{ width: `${ratio * 100}%` }} />
+      </div>
+      <div className="flex h-full items-center gap-3 px-3">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={`Open Now Playing for ${t.name}`}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-80"
+        >
+          <Artwork src={art?.trackArt(t, 200) ?? null} size={56} rounded="rounded-xl" label={t.album} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xl leading-tight font-medium">{t.name}</span>
+            <span className="block truncate text-base leading-tight text-white/50">{t.artist}</span>
+          </span>
+        </button>
+        <IconBtn size={56} label={player.intentPlaying ? 'Pause' : 'Play'} onClick={() => void player.toggle()}>
+          <Icon name={player.intentPlaying ? 'pause' : 'play'} size={28} />
+        </IconBtn>
+      </div>
     </div>
   );
 }
