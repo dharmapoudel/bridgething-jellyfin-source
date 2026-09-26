@@ -92,8 +92,15 @@ export class PlaybackEngine {
   private endWatchTimer: number | null = null;
   private lastPauseAt = 0;
   private lastSeekSentAt = 0;
+  private lastSeekTargetMs: number | null = null;
   private pendingSeekMs: number | null = null;
   private seekSendTimer: number | null = null;
+  // Every playAt() bumps this; async completions from a superseded play
+  // (rapid next/prev, or auto-advance racing a manual skip) must not touch
+  // state once a newer play started. Finamp's robustness comes from skip
+  // being a single idempotent command on one persistent player; the closest
+  // Finch gets over the Bluetooth link is serializing plays like this.
+  private playGen = 0;
   // latest daemon snapshot, for resume reconciliation after an app restart
   private snapSeen = false;
   private snapTrackId: string | null = null;
@@ -161,8 +168,8 @@ export class PlaybackEngine {
     return this.durationMs;
   }
 
-  private streamUrl(track: Track): string {
-    return this.jf!.streamUrl(track.id, this.deviceId);
+  private streamUrl(track: Track, startMs = 0): string {
+    return this.jf!.streamUrl(track.id, this.deviceId, startMs);
   }
 
   async ensureDeviceId(): Promise<void> {
@@ -285,16 +292,17 @@ export class PlaybackEngine {
     await this.playAt(idx);
   }
 
-  private async playAt(i: number): Promise<void> {
+  private async playAt(i: number, startMs = 0): Promise<void> {
     const track = this.queue[i];
     if (!track || !this.jf) return;
+    const gen = ++this.playGen;
     const prev = this.current();
     if (prev && prev.id !== track.id) {
       void this.jf.reportStopped(prev.id, this.sessionId, this.positionNow()).catch(() => {});
     }
     this.index = i;
     this.durationMs = track.durationMs;
-    this.positionMs = 0;
+    this.positionMs = Math.max(0, Math.min(startMs, track.durationMs || 0));
     this.positionAt = Date.now();
     this.loading = true;
     this.error = null;
@@ -305,21 +313,37 @@ export class PlaybackEngine {
     this.lastPauseAt = 0;
     this.newSession();
     this.emit();
-    try {
-      await getClient().player.play({
-        uri: this.streamUrl(track),
-        context: { contextUri: `${CONTEXT_PREFIX}${track.id}` },
-      });
-      void this.jf.reportPlaying(track.id, this.sessionId);
-      this.armProgressTimer();
-      void this.persist();
-    } catch (err) {
-      this.loading = false;
-      this.awaitingStart = false;
-      this.error = err instanceof Error ? err.message : 'could not start playback';
-      this.errorDetail = null;
-      this.emit();
-    }
+    // One attempt to start the phone's player; a superseded play (gen
+    // mismatch) never touches state afterwards.
+    const attempt = async (isRetry: boolean): Promise<void> => {
+      if (gen !== this.playGen) return;
+      try {
+        await getClient().player.play({
+          uri: this.streamUrl(track, startMs),
+          context: { contextUri: `${CONTEXT_PREFIX}${track.id}` },
+        });
+        if (gen !== this.playGen) return;
+        void this.jf!.reportPlaying(track.id, this.sessionId);
+        this.armProgressTimer();
+        void this.persist();
+      } catch (err) {
+        if (gen !== this.playGen) return;
+        if (!isRetry) {
+          // The companion can fumble a new play while it is still tearing
+          // down the old item (rapid skip, or auto-advance landing exactly
+          // at track end): give it a moment and try once more before
+          // surfacing an error.
+          await new Promise((r) => setTimeout(r, 1200));
+          return attempt(true);
+        }
+        this.loading = false;
+        this.awaitingStart = false;
+        this.error = err instanceof Error ? err.message : 'could not start playback';
+        this.errorDetail = null;
+        this.emit();
+      }
+    };
+    await attempt(false);
   }
 
   async toggle(): Promise<void> {
@@ -405,6 +429,7 @@ export class PlaybackEngine {
       this.pendingSeekMs = null;
       if (target === null || this.current()?.id !== trackId) return;
       this.lastSeekSentAt = Date.now();
+      this.lastSeekTargetMs = target;
       // The link can flap mid-send; swallow-and-forget used to lose the
       // seek silently ("can't seek"). One retry 2s later, still guarded
       // by the track check; beyond that the next snapshot corrects the UI.
@@ -730,6 +755,42 @@ export class PlaybackEngine {
   }
 
   handlePlayerError(type: string, reason?: string): void {
+    // A seek the phone rejects (transcoded streams are live ffmpeg pipes:
+    // AVPlayer cannot range-seek them, so the companion fails the seekTo).
+    // Don't flash "Playback failed" and snap the clock back — restart the
+    // track at the seek target via StartTimeTicks instead. lastSeekSentAt is
+    // cleared so the fallback's own failure can't loop back in here; a new
+    // user seek re-arms it.
+    const t = this.current();
+    if (
+      type === 'playFailed' && t && !this.external &&
+      Date.now() - this.lastSeekSentAt < 4000
+    ) {
+      const target = this.lastSeekTargetMs ?? this.positionMs;
+      this.lastSeekSentAt = 0;
+      this.lastSeekTargetMs = null;
+      this.error = null;
+      this.errorDetail = null;
+      const trackId = t.id;
+      void this.playAt(this.index, target).then(() => {
+        // If the server ignored StartTimeTicks (it was a direct-play after
+        // all), the phone sits near 0 while our clock shows the target:
+        // finish with a native seek, which always works on direct streams.
+        window.setTimeout(() => {
+          if (this.current()?.id !== trackId) return;
+          void getClient()
+            .player.stateGet()
+            .then((res) => {
+              if (!res.ok || this.current()?.id !== trackId) return;
+              if (res.response.state.playback.positionMs < target - 5000) {
+                void this.seekTo(target);
+              }
+            })
+            .catch(() => {});
+        }, 1500);
+      });
+      return;
+    }
     this.loading = false;
     this.awaitingStart = false;
     this.intentPlaying = false;

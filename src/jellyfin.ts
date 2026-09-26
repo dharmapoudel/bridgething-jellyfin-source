@@ -455,14 +455,22 @@ export class JellyfinClient {
 
   // Playback stream. Auth must ride in the query string: the phone's stream
   // provider sends no headers, only Icy-MetaData: 1.
-  streamUrl(trackId: string, deviceId: string): string {
-    return this.url(`/Audio/${trackId}/universal`, {
+  // AudioCodec lists ONLY what the iPhone (AVPlayer) can direct-play.
+  // Claiming opus/flac used to make the server direct-play them and the
+  // phone then failed every such track ("Playback failed"); unlisted codecs
+  // now transcode to MP3 instead. startMs restarts a transcode at an offset
+  // (StartTimeTicks) — the fallback for seeking inside transcoded streams,
+  // which AVPlayer cannot range-seek because they are live ffmpeg pipes.
+  streamUrl(trackId: string, deviceId: string, startMs = 0): string {
+    const params: Record<string, string | number> = {
       UserId: this.creds.userId,
       DeviceId: deviceId,
-      AudioCodec: 'mp3,aac,opus,flac',
+      AudioCodec: 'mp3,aac,alac',
       TranscodingContainer: 'mp3',
       TranscodingProtocol: 'http',
-    });
+    };
+    if (startMs > 0) params.StartTimeTicks = Math.round(startMs * 10_000);
+    return this.url(`/Audio/${trackId}/universal`, params);
   }
 
   // Plain <img> needs no CORS, so artwork goes straight at the server.

@@ -232,3 +232,6 @@
 
 ## 0.1.52
 - Now Playing: the lyrics/heart icons now truly sit at the seek bar's ends. The ml-3/mr-3 added in 0.1.49 had the margin sign backwards and inset both icons 24px; the Ghost's own -m-3 negative margin already pulls the 24px icon exactly to the row's edge (icon at x=0 / x=320). Removed the 0.1.51 diagnostic readout; fixed the lyrics-less-server spacer to w-6 (the Ghost's real 24px margin box).
+
+## 0.1.53
+- Playback reliability (Finamp research): (1) the stream URL now claims only codecs the iPhone can direct-play (mp3,aac,alac) — claiming opus/flac made the server direct-play them and the phone failed every such track; (2) seeks the phone rejects (transcoded streams are live pipes AVPlayer can't range-seek) now restart the track at the seek target via StartTimeTicks instead of flashing "Playback failed" and snapping the clock back, with a verify-and-native-seek correction in case the server ignored the offset; (3) playAt is now generation-guarded so rapid next/prev (or auto-advance racing a manual skip) can't have a stale play clobber the new one, and a failed track start retries once after 1.2s before surfacing an error (covers the companion fumbling a new play while tearing down the old item).
