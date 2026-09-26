@@ -194,15 +194,6 @@ function InfoPanel({
   const small = !portrait;
   const t = player.current();
 
-  // TEMP diagnostic (0.1.51): measure the transport row's real on-device
-  // width so we can tell whether it spans the panel or shrink-wraps.
-  // Removed once the layout is confirmed.
-  const rowRef = useRef<HTMLDivElement>(null);
-  const [rowW, setRowW] = useState(0);
-  useEffect(() => {
-    setRowW(rowRef.current?.offsetWidth ?? 0);
-  }, []);
-
   if (!t) return null;
 
   return (
@@ -251,11 +242,12 @@ function InfoPanel({
           {/* o-music transport: bare glyphs, no circles; play/pause takes the
               cover's accent color, skips stay off-white. Lyrics and heart sit
               at the row's extremes, their icons lined up exactly with the seek
-              bar's ends (ml-3/mr-3 flips the Ghost tap-target margin on the
-              outer side so the 24px icon starts at the bar's edge);
-              prev/play/next stay centered between them, untouched.
+              bar's ends: the Ghost's -m-3 negative margin pulls the 24px icon
+              to the row's edge (margin -12 + padding 12 = icon at x=0); no
+              positive margin, which would inset it. Prev/play/next stay
+              centered between them, untouched.
               Inactive icons are translucent, the active state is solid green. */}
-          <div ref={rowRef} className="flex w-full shrink-0 items-center justify-between">
+          <div className="flex w-full shrink-0 items-center justify-between">
               {lyricsSupported !== false ? (
                 <Ghost
                   label={
@@ -268,14 +260,15 @@ function InfoPanel({
                   disabled={!hasLyrics}
                   onClick={onToggleLyrics}
                   tint={lyricsVisible ? '#34d399' : undefined}
-                  className={`${lyricsVisible ? '' : 'opacity-40'} ml-3`}
+                  className={lyricsVisible ? '' : 'opacity-40'}
                 >
                   <Icon name="note" size={24} />
                 </Ghost>
               ) : (
                 // Old servers (< 10.9) hide the lyrics toggle entirely; keep a
-                // same-size spacer so prev/play/next stay centered.
-                <div className="w-12 shrink-0" aria-hidden="true" />
+                // same-size spacer (the lyrics Ghost's 24px margin box) so
+                // prev/play/next stay centered.
+                <div className="w-6 shrink-0" aria-hidden="true" />
               )}
               <div className={`flex items-center ${small ? 'gap-12' : 'gap-10'}`}>
               <Ghost label="Previous" onClick={() => void player.prev()}>
@@ -311,7 +304,7 @@ function InfoPanel({
                 label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                 onClick={onToggleFav}
                 tint={isFavorite ? '#34d399' : undefined}
-                className={`${isFavorite ? '' : 'opacity-40'} mr-3`}
+                className={isFavorite ? '' : 'opacity-40'}
               >
                 <Icon name={isFavorite ? 'heartFill' : 'heart'} size={24} />
               </Ghost>
@@ -328,11 +321,6 @@ function InfoPanel({
               <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
             ) : null}
         </div>
-      </div>
-      {/* TEMP diagnostic (0.1.51): proves which build is on-device and the
-          transport row's measured width. Removed once the layout is confirmed. */}
-      <div className="pointer-events-none absolute bottom-1 right-2 z-10 text-[10px] leading-none text-white/30">
-        v0.1.51 · row {rowW}px
       </div>
     </div>
   );

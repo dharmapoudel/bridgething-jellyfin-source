@@ -229,3 +229,6 @@
 
 ## 0.1.51
 - Now Playing transport row: explicit w-full (belt and suspenders over flex stretch), plus a temporary tiny diagnostic readout (version + measured row width, bottom-right) to confirm on-device which build is running and whether the row spans the panel. Removed once confirmed.
+
+## 0.1.52
+- Now Playing: the lyrics/heart icons now truly sit at the seek bar's ends. The ml-3/mr-3 added in 0.1.49 had the margin sign backwards and inset both icons 24px; the Ghost's own -m-3 negative margin already pulls the 24px icon exactly to the row's edge (icon at x=0 / x=320). Removed the 0.1.51 diagnostic readout; fixed the lyrics-less-server spacer to w-6 (the Ghost's real 24px margin box).
