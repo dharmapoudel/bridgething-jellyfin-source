@@ -92,8 +92,9 @@ export function RemoteSheet({ onClose }: { onClose: () => void }) {
               <button
                 key={s.id}
                 type="button"
+                disabled={s.offline}
                 onClick={() => choose(s)}
-                className={row + (s.offline ? ' opacity-45' : '')}
+                className={row + (s.offline ? ' cursor-default opacity-45' : '')}
               >
                 <Icon name="note" size={30} className="shrink-0 text-white/60" />
                 <div className="min-w-0 flex-1">

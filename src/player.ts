@@ -6,7 +6,7 @@
 
 import { getClient } from './client';
 import { JellyfinClient, JellyfinError, type Track } from './jellyfin';
-import { RemoteControl, type RemoteSessionInfo } from './remote';
+import { RemoteControl, type RemoteSessionInfo, type RemoteState } from './remote';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -135,6 +135,13 @@ export class PlaybackEngine {
   private remotePollTimer: number | null = null;
   private remoteGen = 0;
   private lastRemoteCmdAt = 0;
+  // True while the phone Bluetooth link is known down: remote mode is kept
+  // (the user picked it) but commands short-circuit with 'The phone link
+  // dropped.' instead of failing confusingly, until the link recovers.
+  private remoteLinkDown = false;
+  // Consecutive poll transport failures; the backstop for link drops the
+  // gateway snapshot feed doesn't report.
+  private remoteTransportFails = 0;
 
   configure(jf: JellyfinClient | null): void {
     this.jf = jf;
@@ -321,11 +328,7 @@ export class PlaybackEngine {
         await this.remotePlayNow(list, idx);
         this.lastRemoteCmdAt = Date.now();
       } catch (e) {
-        this.loading = false;
-        this.error = 'Could not reach the player.';
-        // Surface the server's own words (status/reason) under the friendly
-        // message — a 403/404/500 here diagnoses itself.
-        this.errorDetail = e instanceof Error ? e.message : null;
+        this.setRemoteCommandError(e);
       }
       this.emit();
       this.pollRemoteSoon();
@@ -655,9 +658,7 @@ export class PlaybackEngine {
         await this.remotePlayNow(this.queue, i);
         this.lastRemoteCmdAt = Date.now();
       } catch (e) {
-        this.loading = false;
-        this.error = 'Could not reach the player.';
-        this.errorDetail = e instanceof Error ? e.message : null;
+        this.setRemoteCommandError(e);
       }
       this.emit();
       this.pollRemoteSoon();
@@ -705,22 +706,23 @@ export class PlaybackEngine {
   // The remote session id went stale (server 404, or the poll can't find it).
   // Clients get a new session id when their connection drops and reopens —
   // look for the same app on the same device and re-attach to its new id.
-  // Returns true only when attached to a *different* session id.
-  private async healRemoteSession(): Promise<boolean> {
-    if (!this.jf || !this.remoteActive) return false;
+  // 'healed' only when attached to a *different* session id; 'link-down'
+  // when discovery itself couldn't reach the server (not a dead session).
+  private async healRemoteSession(): Promise<'healed' | 'not-found' | 'link-down'> {
+    if (!this.jf || !this.remoteActive) return 'not-found';
     const oldSid = this.remoteSessionId;
     const gen = this.remoteGen;
     let sessions: RemoteSessionInfo[];
     try {
       sessions = await new RemoteControl(this.jf).discover();
     } catch {
-      return false;
+      return 'link-down';
     }
-    if (gen !== this.remoteGen) return false;
+    if (gen !== this.remoteGen) return 'not-found';
     const match =
       sessions.find(s => s.id !== oldSid && s.client === this.remoteClient && s.deviceName === this.remoteDevice) ??
       sessions.find(s => s.id !== oldSid && s.client === this.remoteClient);
-    if (!match) return false;
+    if (!match) return 'not-found';
     this.remoteSessionId = match.id;
     this.remoteClient = match.client;
     this.remoteDevice = match.deviceName;
@@ -732,10 +734,12 @@ export class PlaybackEngine {
     } catch {
       // non-fatal
     }
-    return true;
+    return 'healed';
   }
 
   // Send the Play command, healing a stale session id once before giving up.
+  // Only a server answer (HTTP status) means the id is stale; a transport
+  // failure is the Bluetooth link, not the session — don't heal, report it.
   private async remotePlayNow(list: Track[], idx: number): Promise<void> {
     if (!this.jf || !this.remoteSessionId) throw new JellyfinError(0, 'no remote session');
     const rc = new RemoteControl(this.jf);
@@ -743,11 +747,23 @@ export class PlaybackEngine {
       await rc.playNow(this.remoteSessionId, list.map(t => t.id), idx);
       return;
     } catch (e) {
-      const stale = e instanceof JellyfinError && (e.status === 404 || e.status === 400);
-      if (!stale) throw e;
-      if (!(await this.healRemoteSession()) || !this.jf || !this.remoteSessionId) throw e;
+      if (!(e instanceof JellyfinError) || e.status === 0) throw e;
+      const healed = await this.healRemoteSession();
+      if (healed !== 'healed' || !this.jf || !this.remoteSessionId) {
+        throw healed === 'link-down' ? new JellyfinError(0, 'link down') : e;
+      }
       await new RemoteControl(this.jf).playNow(this.remoteSessionId, list.map(t => t.id), idx);
     }
+  }
+
+  // A server answer (4xx/5xx) and the Bluetooth link dying are different
+  // failures: only the server's words diagnose, so only they are shown.
+  private setRemoteCommandError(e: unknown): void {
+    const serverSaid = e instanceof JellyfinError && e.status !== 0;
+    this.loading = false;
+    this.error = serverSaid ? 'Could not reach the player.' : 'The phone link dropped.';
+    this.errorDetail = serverSaid && e instanceof Error ? e.message : null;
+    this.emit();
   }
 
   // Engage remote mode: stop any local companion playback (two audio
@@ -768,6 +784,8 @@ export class PlaybackEngine {
     this.loading = true;
     this.error = null;
     this.errorDetail = null;
+    this.remoteLinkDown = false;
+    this.remoteTransportFails = 0;
     this.external = false;
     this.awaitingStart = false;
     this.emit();
@@ -805,6 +823,8 @@ export class PlaybackEngine {
     this.remoteSessionId = null;
     this.remoteClient = '';
     this.remoteDevice = '';
+    this.remoteLinkDown = false;
+    this.remoteTransportFails = 0;
     this.queue = [];
     this.index = -1;
     this.intentPlaying = false;
@@ -829,24 +849,49 @@ export class PlaybackEngine {
     const gen = this.remoteGen;
     let sid = this.remoteSessionId;
     if (!this.jf || !sid) return;
-    const fetchState = async () => {
-      try {
-        return await new RemoteControl(this.jf!).state(sid!);
-      } catch {
-        return undefined; // transient network blip: keep last state, try again next poll
-      }
-    };
-    let st = await fetchState();
+    let st: RemoteState | null | undefined;
+    try {
+      st = await new RemoteControl(this.jf).state(sid);
+    } catch {
+      st = undefined; // transport failure (link down), not a server answer
+    }
     if (gen !== this.remoteGen) return;
-    if (st === undefined) return;
+    if (st === undefined) {
+      // Don't mistake a dead link for a dead session: count consecutive
+      // transport failures, and only then call the link dropped.
+      this.remoteTransportFails++;
+      if (this.remoteTransportFails >= 3 && !this.remoteLinkDown) {
+        this.remoteLinkDown = true;
+        this.error = 'The phone link dropped.';
+        this.emit();
+      }
+      return;
+    }
+    this.remoteTransportFails = 0;
+    if (this.remoteLinkDown) {
+      // Link is back: clear the outage state; the poll below re-syncs.
+      this.remoteLinkDown = false;
+      if (this.error === 'The phone link dropped.') this.error = null;
+    }
     if (!st) {
       // The session id is stale — the client probably reconnected under a new
-      // id. Re-attach to it instead of dropping to local mode.
-      if ((await this.healRemoteSession()) && this.remoteSessionId) {
+      // id. Re-attach to it instead of dropping to local mode. But if the
+      // link is down, keep the session: nothing proved it dead.
+      const healed = await this.healRemoteSession();
+      if (gen !== this.remoteGen) return;
+      if (healed === 'healed' && this.remoteSessionId) {
         sid = this.remoteSessionId;
-        st = await fetchState();
+        try {
+          st = await new RemoteControl(this.jf!).state(sid);
+        } catch {
+          return;
+        }
         if (gen !== this.remoteGen) return;
-        if (st === undefined) return;
+      } else if (healed === 'link-down') {
+        this.remoteLinkDown = true;
+        this.error = 'The phone link dropped.';
+        this.emit();
+        return;
       }
       if (!st) {
         // Client closed or went offline: fall back to local mode.
@@ -920,11 +965,18 @@ export class PlaybackEngine {
   private remoteCommand(cmd: 'Pause' | 'Unpause' | 'NextTrack' | 'PreviousTrack' | 'Seek', seekMs?: number): void {
     const sid = this.remoteSessionId;
     if (!sid || !this.jf) return;
+    if (this.remoteLinkDown) {
+      // Don't fire commands into a dead link; say so instead.
+      this.error = 'The phone link dropped.';
+      this.emit();
+      return;
+    }
     this.lastRemoteCmdAt = Date.now();
     new RemoteControl(this.jf)
       .command(sid, cmd, seekMs)
-      .catch(() => {
-        this.error = 'Could not reach the player.';
+      .catch((e: unknown) => {
+        const serverSaid = e instanceof JellyfinError && e.status !== 0;
+        this.error = serverSaid ? 'Could not reach the player.' : 'The phone link dropped.';
         this.emit();
       });
     this.pollRemoteSoon();
@@ -934,15 +986,33 @@ export class PlaybackEngine {
   // otherwise blind to link drops: snapshots keep arriving with the
   // daemon's extrapolated position while the phone restarts the track.
   handleGateway(connected: boolean): void {
-    // Remote mode: position comes from server polls; the Bluetooth link
-    // only carries the API calls, which fail loudly on their own.
-    if (this.remoteActive) return;
     const prev = this.gatewayUp;
     this.gatewayUp = connected;
     if (prev === null || prev === connected) return; // first sighting or no change
     // genuine transition: let views retry anything that failed mid-outage
     this.linkGen++;
     for (const fn of this.linkListeners) fn();
+    if (this.remoteActive) {
+      // Remote mode: every API call rides this link. On a drop, stop
+      // trusting the session (commands short-circuit with 'The phone link
+      // dropped.') instead of clinging to a dead session and 404ing; on
+      // reconnect, re-sync — the poll heals a rotated session id or falls
+      // back to local if the client is really gone.
+      if (!connected) {
+        this.remoteTransportFails = 0;
+        if (!this.remoteLinkDown) {
+          this.remoteLinkDown = true;
+          this.error = 'The phone link dropped.';
+          this.emit();
+        }
+      } else if (this.remoteLinkDown) {
+        this.remoteLinkDown = false;
+        if (this.error === 'The phone link dropped.') this.error = null;
+        this.emit();
+        void this.pollRemote();
+      }
+      return;
+    }
     if (this.healTimer !== null) {
       window.clearTimeout(this.healTimer);
       this.healTimer = null;
