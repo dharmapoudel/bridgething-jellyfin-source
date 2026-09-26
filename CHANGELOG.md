@@ -208,3 +208,6 @@
 
 ## 0.1.44
 - The lyrics tab is now a persisted preference: it survives app restarts, not just track changes. Moved from NowPlaying's local state into the player (player.lyricsTab + setLyricsTab), stored in finch:prefs alongside shuffle/repeat and restored by loadPrefs() at boot.
+
+## 0.1.45
+- Now Playing layout: the lyrics and heart icons move into the transport row (lyrics left of previous, heart right of next) instead of their own row, and the single controls row is centered vertically between the seek bar and the bottom of the screen.

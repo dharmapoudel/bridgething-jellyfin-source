@@ -217,8 +217,9 @@ function InfoPanel({
       />
       <div className="relative flex min-h-0 flex-1 flex-col px-5 py-4">
         <div className="flex min-h-0 flex-1 flex-col gap-5">
-          {/* the track takes the space above; the controls hold the bottom edge whatever is left */}
-          <div className="flex min-h-0 flex-1 flex-col justify-between gap-4 py-1">
+          {/* track info ends at the seek row; the controls take the space
+              below and sit centered in it */}
+          <div className="flex shrink-0 flex-col gap-4 py-1">
             <div className="flex shrink-0 justify-start">
               <Clock />
             </div>
@@ -239,80 +240,79 @@ function InfoPanel({
             </div>
           </div>
 
-          {/* o-music transport: bare glyphs, no circles; play/pause takes the
-              cover's accent color, skips stay off-white */}
-          <div className={`flex shrink-0 items-center justify-center ${small ? 'gap-12' : 'gap-10'}`}>
-            <Ghost label="Previous" onClick={() => void player.prev()}>
-              <TransportGlyph
-                name="skip"
-                className={small ? 'h-9 w-9 -scale-x-100' : 'h-8 w-8 -scale-x-100'}
-              />
-            </Ghost>
-            <Ghost
-              label={player.intentPlaying ? 'Pause' : 'Play'}
-              onClick={() => void player.toggle()}
-              tint={accent?.fill}
-            >
-              {player.loading ? (
-                <span className="block h-10 w-10 animate-spin rounded-full border-4 border-white/15 border-t-white/85" />
-              ) : (
-                <span
-                  key={player.intentPlaying ? 'pause' : 'play'}
-                  className="grid animate-pop place-items-center"
+          {/* one transport row, centered between the seek row and the bottom
+              edge: lyrics left of previous, heart right of next.
+              o-music transport: bare glyphs, no circles; play/pause takes the
+              cover's accent color, skips stay off-white. Inactive lyrics/heart
+              icons are translucent; the active state is a solid green icon. */}
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2">
+            <div className={`flex items-center justify-center ${small ? 'gap-12' : 'gap-10'}`}>
+              {lyricsSupported !== false ? (
+                <Ghost
+                  label={
+                    hasLyrics
+                      ? lyricsVisible
+                        ? 'Hide lyrics'
+                        : 'Show lyrics'
+                      : 'No lyrics for this track'
+                  }
+                  disabled={!hasLyrics}
+                  onClick={onToggleLyrics}
+                  tint={lyricsVisible ? '#34d399' : undefined}
+                  className={lyricsVisible ? '' : 'opacity-40'}
                 >
-                  <TransportGlyph
-                    name={player.intentPlaying ? 'pause' : 'play'}
-                    className={small ? 'h-10 w-10' : 'h-9 w-9'}
-                  />
-                </span>
-              )}
-            </Ghost>
-            <Ghost label="Next" onClick={() => void player.next()}>
-              <TransportGlyph name="skip" className={small ? 'h-9 w-9' : 'h-8 w-8'} />
-            </Ghost>
-          </div>
-
-          {/* lyrics + heart take the row o-music gives to its volume bar.
-              Inactive icons are translucent; the active state is a solid
-              green icon. */}
-          <div className="flex shrink-0 items-center justify-between">
-            {lyricsSupported !== false ? (
-              <Ghost
-                label={
-                  hasLyrics
-                    ? lyricsVisible
-                      ? 'Hide lyrics'
-                      : 'Show lyrics'
-                    : 'No lyrics for this track'
-                }
-                disabled={!hasLyrics}
-                onClick={onToggleLyrics}
-                tint={lyricsVisible ? '#34d399' : undefined}
-                className={lyricsVisible ? '' : 'opacity-40'}
-              >
-                <Icon name="note" size={24} />
-              </Ghost>
-            ) : null}
-            <Ghost
-              label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              onClick={onToggleFav}
-              tint={isFavorite ? '#34d399' : undefined}
-              className={isFavorite ? '' : 'opacity-40'}
-            >
-              <Icon name={isFavorite ? 'heartFill' : 'heart'} size={24} />
-            </Ghost>
-          </div>
-
-          {player.error ? (
-            <div className="shrink-0 px-1 pt-1 text-center">
-              <div className="text-xl text-red-300">{player.error}</div>
-              {player.errorDetail ? (
-                <div className="mt-1 text-sm leading-snug text-white/35">{player.errorDetail}</div>
+                  <Icon name="note" size={24} />
+                </Ghost>
               ) : null}
+              <Ghost label="Previous" onClick={() => void player.prev()}>
+                <TransportGlyph
+                  name="skip"
+                  className={small ? 'h-9 w-9 -scale-x-100' : 'h-8 w-8 -scale-x-100'}
+                />
+              </Ghost>
+              <Ghost
+                label={player.intentPlaying ? 'Pause' : 'Play'}
+                onClick={() => void player.toggle()}
+                tint={accent?.fill}
+              >
+                {player.loading ? (
+                  <span className="block h-10 w-10 animate-spin rounded-full border-4 border-white/15 border-t-white/85" />
+                ) : (
+                  <span
+                    key={player.intentPlaying ? 'pause' : 'play'}
+                    className="grid animate-pop place-items-center"
+                  >
+                    <TransportGlyph
+                      name={player.intentPlaying ? 'pause' : 'play'}
+                      className={small ? 'h-10 w-10' : 'h-9 w-9'}
+                    />
+                  </span>
+                )}
+              </Ghost>
+              <Ghost label="Next" onClick={() => void player.next()}>
+                <TransportGlyph name="skip" className={small ? 'h-9 w-9' : 'h-8 w-8'} />
+              </Ghost>
+              <Ghost
+                label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                onClick={onToggleFav}
+                tint={isFavorite ? '#34d399' : undefined}
+                className={isFavorite ? '' : 'opacity-40'}
+              >
+                <Icon name={isFavorite ? 'heartFill' : 'heart'} size={24} />
+              </Ghost>
             </div>
-          ) : player.external ? (
-            <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
-          ) : null}
+
+            {player.error ? (
+              <div className="shrink-0 px-1 pt-1 text-center">
+                <div className="text-xl text-red-300">{player.error}</div>
+                {player.errorDetail ? (
+                  <div className="mt-1 text-sm leading-snug text-white/35">{player.errorDetail}</div>
+                ) : null}
+              </div>
+            ) : player.external ? (
+              <div className="shrink-0 pt-1 text-xl text-white/50">Another app is playing on the phone.</div>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
