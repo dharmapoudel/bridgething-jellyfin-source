@@ -217,9 +217,8 @@ function InfoPanel({
       />
       <div className="relative flex min-h-0 flex-1 flex-col px-5 py-4">
         <div className="flex min-h-0 flex-1 flex-col gap-5">
-          {/* the track takes the space above (clock, then titles right under
-              it); the seek bar + controls hold the bottom edge */}
-          <div className="flex min-h-0 flex-1 flex-col gap-4 py-1">
+          {/* the track takes the space above; the controls hold the bottom edge whatever is left */}
+          <div className="flex min-h-0 flex-1 flex-col justify-between gap-4 py-1">
             <div className="flex shrink-0 justify-start">
               <Clock />
             </div>
@@ -234,18 +233,16 @@ function InfoPanel({
               </div>
               <div className="mt-1.5 line-clamp-2 text-[1.25rem] text-white/55">{t.artist}</div>
             </div>
+
+            <div className="shrink-0">
+              <ProgressBar onSeek={ms => void player.seekTo(ms)} />
+            </div>
           </div>
 
-          {/* the seek bar rides just above the controls */}
-          <div className="shrink-0">
-            <ProgressBar onSeek={ms => void player.seekTo(ms)} />
-          </div>
-
-          {/* one transport row at the bottom edge, where the lyrics+heart row
-              used to be: lyrics left of previous, heart right of next.
-              o-music transport: bare glyphs, no circles; play/pause takes the
-              cover's accent color, skips stay off-white. Inactive lyrics/heart
-              icons are translucent; the active state is a solid green icon. */}
+          {/* o-music transport: bare glyphs, no circles; play/pause takes the
+              cover's accent color, skips stay off-white. Lyrics sits left of
+              previous, heart right of next; inactive icons are translucent,
+              the active state is a solid green icon. */}
           <div className={`flex shrink-0 items-center justify-center ${small ? 'gap-12' : 'gap-10'}`}>
               {lyricsSupported !== false ? (
                 <Ghost

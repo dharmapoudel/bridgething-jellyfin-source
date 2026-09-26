@@ -217,3 +217,6 @@
 
 ## 0.1.47
 - Now Playing: the song title + artist section stays put right under the clock — no longer pushed down toward the seek bar. The space between the titles and the bottom-anchored seek/controls cluster is just empty.
+
+## 0.1.48
+- Now Playing back to the 0.1.44 layout, with one change: the lyrics icon sits left of previous and the heart icon right of next in the transport row. Nothing else moved — seek bar, titles, and row positions are exactly as they were.
