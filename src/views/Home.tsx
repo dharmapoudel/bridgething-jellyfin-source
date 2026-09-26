@@ -185,7 +185,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => nav({ name: 'library', tab: 'albums' })}
+                  onClick={() => nav({ name: 'albums' })}
                   className="rounded-full px-4 py-2 text-lg font-medium text-goldlight active:bg-white/10"
                 >
                   See all
@@ -197,7 +197,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
                     <button
                       type="button"
                       onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
-                      className="flex w-full items-center gap-3 py-2 text-left active:opacity-80"
+                      className="flex w-full items-center gap-3 pb-4 text-left active:opacity-80"
                     >
                       <Artwork src={art?.albumArt(a) ?? null} size={56} rounded="rounded-lg" label={a.name} />
                       <span className="min-w-0 flex-1">
@@ -216,7 +216,7 @@ export default function Home({ jf, nav, openMenu }: ViewProps) {
 
         {favs.data && favs.data.length ? (
           <Rise>
-            <Rail title="Favorites">
+            <Rail title="Favorites" onSeeAll={() => nav({ name: 'favorites' })}>
               {favs.data.map((t, i) => {
                 const isCurrent = nowActive && t.id === nowId;
                 return (

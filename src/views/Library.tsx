@@ -30,13 +30,17 @@ function SkeletonGrid() {
 }
 
 const TABS: { id: LibTab; label: string }[] = [
-  { id: 'playlists', label: 'Playlists' },
-  { id: 'albums', label: 'Albums' },
   { id: 'artists', label: 'Artists' },
   { id: 'genres', label: 'Genres' },
 ];
 
-export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & { initialTab: LibTab }) {
+export default function Library({
+  jf,
+  nav,
+  openMenu,
+  initialTab,
+  hideTabBar = false,
+}: ViewProps & { initialTab: LibTab; hideTabBar?: boolean }) {
   const art = useArt();
   const [tab, setTab] = useState<LibTab>(initialTab);
   const [albums, setAlbums] = useState<Album[] | null>(null);
@@ -213,20 +217,22 @@ export default function Library({ jf, nav, openMenu, initialTab }: ViewProps & {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-white/10 p-3">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`h-14 shrink-0 rounded-full px-6 text-xl font-medium ${
-              tab === t.id ? 'bg-leaf text-black' : 'bg-white/10 text-white/80 active:bg-white/20'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {hideTabBar ? null : (
+        <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-white/10 p-3">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`h-14 shrink-0 rounded-full px-6 text-xl font-medium ${
+                tab === t.id ? 'bg-leaf text-black' : 'bg-white/10 text-white/80 active:bg-white/20'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto p-4"

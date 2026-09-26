@@ -5,6 +5,7 @@ import { JellyfinClient, type Creds } from './jellyfin';
 import { player } from './player';
 import type { View } from './nav';
 import Detail from './views/Detail';
+import Favorites from './views/Favorites';
 import Home from './views/Home';
 import Library from './views/Library';
 import NowPlaying from './views/NowPlaying';
@@ -12,10 +13,11 @@ import { QueueHandle, QueueSheet } from './QueueSheet';
 import Queue from './views/Queue';
 import Setup, { CREDS_KEY, type StoredCreds } from './views/Setup';
 
-const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | 'note'; label: string }[] = [
+const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'playlist' | 'album'; label: string }[] = [
   { view: { name: 'home' }, icon: 'home', label: 'Home' },
-  { view: { name: 'library', tab: 'playlists' }, icon: 'library', label: 'Library' },
-  { view: { name: 'queue' }, icon: 'queue', label: 'Queue' },
+  { view: { name: 'library', tab: 'artists' }, icon: 'library', label: 'Library' },
+  { view: { name: 'playlists' }, icon: 'playlist', label: 'Playlists' },
+  { view: { name: 'albums' }, icon: 'album', label: 'Albums' },
 ];
 
 // o-music-style top tab strip: each tab's 2px line sits directly below its
@@ -27,19 +29,40 @@ const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | '
 // button is pressed: it drops down under the line, then slides back up and
 // hides when the press is lifted. The active tab is shown by its leaf-green
 // line and bright label.
-const TAB_X = ['12.5%', '37.5%', '62.5%']; // o-music PRESET_AT, 4th (87.5%) unused for now
+const TAB_X = ['12.5%', '37.5%', '62.5%', '87.5%']; // o-music PRESET_AT, all four used
 function TopTabs({
   view,
+  parentName,
   onNav,
   pressedIdx,
   setPressedIdx,
 }: {
   view: View;
+  parentName: string | undefined;
   onNav: (v: View) => void;
   pressedIdx: number | null;
   setPressedIdx: (i: number | null) => void;
 }) {
-  const activeIdx = view.name === 'home' ? 0 : view.name === 'queue' ? 2 : 1;
+  // Detail drill-ins keep their origin tab highlighted (Library for
+  // library-drilled details); the favorites list highlights Home.
+  const activeIdx =
+    view.name === 'home'
+      ? 0
+      : view.name === 'library'
+        ? 1
+        : view.name === 'playlists'
+          ? 2
+          : view.name === 'albums'
+            ? 3
+            : view.name === 'favorites'
+              ? 0
+              : view.name === 'detail'
+                ? parentName === 'playlists'
+                  ? 2
+                  : parentName === 'albums'
+                    ? 3
+                    : 1
+                : 1;
   return (
     <div
       className={`relative z-10 h-[30px] shrink-0 transition-all duration-300 ${
@@ -254,11 +277,17 @@ export default function App() {
     if (
       v.name === 'nowplaying' &&
       cur.name !== 'nowplaying' &&
-      (cur.name === 'home' || cur.name === 'library' || cur.name === 'queue')
+      (cur.name === 'home' || cur.name === 'library' || cur.name === 'playlists' || cur.name === 'albums' || cur.name === 'queue')
     ) {
       returnViewRef.current = cur;
     }
-    const isRoot = v.name === 'home' || v.name === 'library' || v.name === 'queue' || v.name === 'nowplaying';
+    const isRoot =
+      v.name === 'home' ||
+      v.name === 'library' ||
+      v.name === 'playlists' ||
+      v.name === 'albums' ||
+      v.name === 'queue' ||
+      v.name === 'nowplaying';
     setStack(prev => (isRoot ? [v] : [...prev, v]));
   }, []);
 
@@ -352,9 +381,9 @@ export default function App() {
       // press never gives the on-screen button a CSS :active.
       if (v.name === 'setup') return;
       if (e.key === '1') pressTab(0, { name: 'home' });
-      else if (e.key === '2') pressTab(1, { name: 'library', tab: 'playlists' });
-      else if (e.key === '3') pressTab(2, { name: 'queue' });
-      else if (e.key === '4') nav({ name: 'nowplaying' });
+      else if (e.key === '2') pressTab(1, { name: 'library', tab: 'artists' });
+      else if (e.key === '3') pressTab(2, { name: 'playlists' });
+      else if (e.key === '4') pressTab(3, { name: 'albums' });
     };
     const onWheel = (e: WheelEvent): void => {
       if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
@@ -367,7 +396,7 @@ export default function App() {
     // lifting a hardware preset button ends the tab press reveal; the
     // timeout in pressTab covers devices that never send keyup
     const onKeyUp = (e: KeyboardEvent): void => {
-      if (e.key === '1' || e.key === '2' || e.key === '3') clearPressed();
+      if (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4') clearPressed();
     };
     window.addEventListener('keyup', onKeyUp);
     return () => {
@@ -409,6 +438,12 @@ export default function App() {
         return <Home {...props} />;
       case 'library':
         return <Library {...props} initialTab={view.tab} />;
+      case 'playlists':
+        return <Library {...props} initialTab="playlists" hideTabBar />;
+      case 'albums':
+        return <Library {...props} initialTab="albums" hideTabBar />;
+      case 'favorites':
+        return <Favorites {...props} />;
       case 'detail':
         return <Detail {...props} params={view} />;
       case 'queue':
@@ -431,7 +466,15 @@ export default function App() {
             Lost connection to the device. Reconnect to continue.
           </div>
         ) : null}
-        {showChrome ? <TopTabs view={view} onNav={nav} pressedIdx={pressedIdx} setPressedIdx={setPressedIdx} /> : null}
+        {showChrome ? (
+          <TopTabs
+            view={view}
+            parentName={stack[stack.length - 2]?.name}
+            onNav={nav}
+            pressedIdx={pressedIdx}
+            setPressedIdx={setPressedIdx}
+          />
+        ) : null}
         <div className="relative min-h-0 flex-1">{renderView()}</div>
         {/* Queue bar on every screen while a song is playing; the mini player is gone. */}
         {current ? <QueueHandle onOpen={() => setQueueOpen(true)} /> : null}

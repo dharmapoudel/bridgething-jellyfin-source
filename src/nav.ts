@@ -4,6 +4,9 @@ export type LibTab = 'albums' | 'artists' | 'playlists' | 'genres';
 export type View =
   | { name: 'home' }
   | { name: 'library'; tab: LibTab }
+  | { name: 'playlists' }
+  | { name: 'albums' }
+  | { name: 'favorites' }
   | { name: 'detail'; kind: 'album' | 'artist' | 'playlist' | 'genre'; id: string; title: string }
   | { name: 'nowplaying' }
   | { name: 'queue' }
