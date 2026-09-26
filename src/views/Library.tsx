@@ -1,7 +1,6 @@
-import { playlistActions } from '../actions';
 import { GridCard, Rail, Tile, TopBar, Spinner, useArt } from '../components';
 import { player } from '../player';
-import { type Artist, type Genre, type Playlist } from '../jellyfin';
+import { type Artist, type Genre } from '../jellyfin';
 import type { JellyfinClient } from '../jellyfin';
 import type { NavFn, ViewProps } from '../nav';
 import {
@@ -171,34 +170,3 @@ export function GenresAll({ jf, nav, back }: ViewProps) {
   );
 }
 
-// Playlists tab: full grid (no TopBar — it's a top-level tab).
-export function PlaylistsAll({ jf, nav, openMenu }: ViewProps) {
-  const art = useArt();
-  const { data, error, rawError, retry } = useBounded<Playlist>('lib:playlists', () => jf.playlists());
-  const scroll = useScrollKeepAlive('playlists', !!data);
-
-  return (
-    <div className="flex h-full flex-col">
-      <div ref={scroll.ref} onScroll={scroll.onScroll} className="min-h-0 flex-1 overflow-y-auto p-4">
-        {error ? (
-          <ListError error={error} rawError={rawError} onRetry={retry} what="playlists" nav={nav} />
-        ) : data ? (
-          <div className="grid grid-cols-3 gap-x-4 gap-y-6">
-            {data.map(p => (
-              <GridCard
-                key={p.id}
-                title={p.name}
-                subtitle={p.songCount ? `${p.songCount} tracks` : undefined}
-                art={art?.playlistArt(p) ?? null}
-                onClick={() => nav({ name: 'detail', kind: 'playlist', id: p.id, title: p.name })}
-                onMenu={() => openMenu(p.name, playlistActions(p, jf, nav))}
-              />
-            ))}
-          </div>
-        ) : (
-          <SkeletonGrid />
-        )}
-      </div>
-    </div>
-  );
-}

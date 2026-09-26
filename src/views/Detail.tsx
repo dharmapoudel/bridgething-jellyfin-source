@@ -17,6 +17,7 @@ import {
   useLinkGen,
 } from '../components';
 import { player } from '../player';
+import { recordPlaylistPlay } from '../recent';
 import type { Album, Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
 
@@ -118,6 +119,9 @@ export default function Detail({ jf, nav, back, openMenu, params }: ViewProps & 
 
   const playAll = (shuffle: boolean): void => {
     if (tracks?.length) {
+      if (params.kind === 'playlist') {
+        recordPlaylistPlay({ id: params.id, name: params.title, songCount: tracks.length, imageTag: null });
+      }
       nav({ name: 'nowplaying' });
       void player.playQueue(tracks, 0, shuffle);
     }

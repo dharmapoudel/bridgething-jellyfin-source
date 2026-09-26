@@ -18,7 +18,8 @@ import Detail from './views/Detail';
 import Favorites from './views/Favorites';
 import Home from './views/Home';
 import AlbumsHome, { AlbumListView } from './views/Albums';
-import Library, { ArtistsAll, GenresAll, PlaylistsAll } from './views/Library';
+import Library, { ArtistsAll, GenresAll } from './views/Library';
+import PlaylistsHome, { PlaylistListView } from './views/Playlists';
 import NowPlaying from './views/NowPlaying';
 import { QueueHandle, QueueSheet } from './QueueSheet';
 import Queue from './views/Queue';
@@ -67,14 +68,14 @@ function TopTabs({
       ? 0
       : view.name === 'library' || view.name === 'artists' || view.name === 'genres'
         ? 1
-        : view.name === 'playlists'
+        : view.name === 'playlists' || view.name === 'playlistlist'
           ? 2
           : view.name === 'albums' || view.name === 'albumlist'
             ? 3
             : view.name === 'favorites'
               ? 0
               : view.name === 'detail'
-                ? parentName === 'playlists'
+                ? parentName === 'playlists' || parentName === 'playlistlist'
                   ? 2
                   : parentName === 'albums' || parentName === 'albumlist'
                     ? 3
@@ -505,7 +506,9 @@ export default function App() {
       case 'genres':
         return <GenresAll {...props} />;
       case 'playlists':
-        return <PlaylistsAll {...props} />;
+        return <PlaylistsHome {...props} />;
+      case 'playlistlist':
+        return <PlaylistListView {...props} kind={view.kind} />;
       case 'albums':
         return <AlbumsHome {...props} />;
       case 'albumlist':

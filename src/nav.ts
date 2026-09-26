@@ -6,7 +6,8 @@ export type View =
   | { name: 'albums' }
   | { name: 'artists' }
   | { name: 'genres' }
-  | { name: 'albumlist'; kind: 'favorites' | 'recent' }
+  | { name: 'albumlist'; kind: 'favorites' | 'recent' | 'all' }
+  | { name: 'playlistlist'; kind: 'favorites' | 'recent' | 'all' }
   | { name: 'favorites' }
   | { name: 'detail'; kind: 'album' | 'artist' | 'playlist' | 'genre'; id: string; title: string }
   | { name: 'nowplaying' }

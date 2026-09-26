@@ -1,5 +1,6 @@
 // context-menu actions shared by the views.
 import { player } from './player';
+import { recordPlaylistPlay } from './recent';
 import { JellyfinClient, type Album, type Playlist, type Track } from './jellyfin';
 import type { MenuAction } from './components';
 import type { NavFn } from './nav';
@@ -95,6 +96,7 @@ export function playlistActions(p: Playlist, jf: JellyfinClient, nav: NavFn): Me
       .playlistItems(p.id)
       .then(ts => {
         if (ts.length) {
+          recordPlaylistPlay(p);
           nav({ name: 'nowplaying' });
           return player.playQueue(ts, 0, shuffle);
         }

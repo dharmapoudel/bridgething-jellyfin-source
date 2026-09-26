@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { albumActions } from '../actions';
-import { GridCard, Rail, Tile, TopBar, useArt } from '../components';
+import { Empty, GridCard, Rail, Tile, TopBar, useArt } from '../components';
 import { type Album, type Track } from '../jellyfin';
 import type { ViewProps } from '../nav';
 import {
@@ -27,15 +27,17 @@ function albumsFromTracks(tracks: Track[]): Album[] {
       artist: t.artist,
       year: null,
       songCount: 0,
-      imageTag: t.albumImageTag,
+      // Album art tag can be missing on older servers even when the track
+      // carries its own art — fall back so the tile isn't a placeholder.
+      imageTag: t.albumImageTag ?? t.imageTag,
       isFavorite: false,
     });
   }
   return out;
 }
 
-// Albums tab: Favorite albums rail, Recently played rail, then the full
-// All albums grid — all in the Recent-tracks rail design language.
+// Albums tab: Favorite albums rail, Recently played albums rail, then an
+// All albums rail with See all — all in the Recent-tracks rail design language.
 export default function AlbumsHome({ jf, nav, openMenu }: ViewProps) {
   const art = useArt();
   const favs = useBounded<Album>('albums:favs', () => jf.favoriteAlbums(RAIL_N));
@@ -85,37 +87,24 @@ export default function AlbumsHome({ jf, nav, openMenu }: ViewProps) {
             )}
             {recentAlbums ? (
               recentAlbums.length > 0 ? (
-                <Rail title="Recently played" onSeeAll={() => nav({ name: 'albumlist', kind: 'recent' })}>
+                <Rail title="Recently played albums" onSeeAll={() => nav({ name: 'albumlist', kind: 'recent' })}>
                   {recentAlbums.slice(0, RAIL_N).map(albumTile)}
                 </Rail>
               ) : null
             ) : (
               <RailSkeleton />
             )}
-            <section className="px-5">
-              <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-white/80">All albums</h2>
-              {albums.data ? (
-                <>
-                  <div className="grid grid-cols-3 gap-x-4 gap-y-6">
-                    {albums.data.map(a => (
-                      <GridCard
-                        key={a.id}
-                        title={a.name}
-                        subtitle={a.artist}
-                        art={art?.albumArt(a) ?? null}
-                        onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
-                        onMenu={() => openMenu(a.name, albumActions(a, jf, nav))}
-                      />
-                    ))}
-                  </div>
-                  {albums.loadingMore && (
-                    <p className="mt-4 text-center text-sm text-white/40">Loading more…</p>
-                  )}
-                </>
+            {albums.data ? (
+              albums.data.length > 0 ? (
+                <Rail title="All albums" onSeeAll={() => nav({ name: 'albumlist', kind: 'all' })}>
+                  {albums.data.slice(0, RAIL_N).map(albumTile)}
+                </Rail>
               ) : (
-                <SkeletonGrid />
-              )}
-            </section>
+                <Empty text="No albums found." />
+              )
+            ) : (
+              <RailSkeleton />
+            )}
           </>
         )}
       </div>
@@ -123,8 +112,8 @@ export default function AlbumsHome({ jf, nav, openMenu }: ViewProps) {
   );
 }
 
-// See-all destination for the Favorite albums / Recently played rails.
-export function AlbumListView({
+// See-all destination for the Favorite albums / Recently played albums rails.
+function BoundedAlbumListView({
   jf,
   nav,
   back,
@@ -132,7 +121,7 @@ export function AlbumListView({
   kind,
 }: ViewProps & { kind: 'favorites' | 'recent' }) {
   const art = useArt();
-  const title = kind === 'favorites' ? 'Favorite albums' : 'Recently played';
+  const title = kind === 'favorites' ? 'Favorite albums' : 'Recently played albums';
   const list = useBounded<Album>(
     `albums:${kind}:all`,
     () =>
@@ -168,4 +157,47 @@ export function AlbumListView({
       </div>
     </div>
   );
+}
+
+// See-all destination for the All albums rail: the full paged collection.
+function AllAlbumsView({ jf, nav, back, openMenu }: ViewProps) {
+  const art = useArt();
+  const list = usePagedList<Album>('lib:albums', (s, l) => jf.albums(s, l));
+  const scroll = useScrollKeepAlive('albumlist:all', !!list.data);
+  const { data, error, rawError, retry, loadingMore } = list;
+
+  return (
+    <div className="flex h-full flex-col">
+      <TopBar title="All albums" onBack={back} />
+      <div ref={scroll.ref} onScroll={scroll.onScroll} className="min-h-0 flex-1 overflow-y-auto p-4">
+        {error ? (
+          <ListError error={error} rawError={rawError} onRetry={retry} what="albums" nav={nav} />
+        ) : data ? (
+          <>
+            <div className="grid grid-cols-3 gap-x-4 gap-y-6">
+              {data.map(a => (
+                <GridCard
+                  key={a.id}
+                  title={a.name}
+                  subtitle={a.artist}
+                  art={art?.albumArt(a) ?? null}
+                  onClick={() => nav({ name: 'detail', kind: 'album', id: a.id, title: a.name })}
+                  onMenu={() => openMenu(a.name, albumActions(a, jf, nav))}
+                />
+              ))}
+            </div>
+            {loadingMore && <p className="mt-4 text-center text-sm text-white/40">Loading more…</p>}
+          </>
+        ) : (
+          <SkeletonGrid />
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function AlbumListView(props: ViewProps & { kind: 'favorites' | 'recent' | 'all' }) {
+  const { kind } = props;
+  if (kind === 'all') return <AllAlbumsView {...props} />;
+  return <BoundedAlbumListView {...props} kind={kind} />;
 }

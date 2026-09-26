@@ -415,10 +415,26 @@ export class JellyfinClient {
     );
   }
 
-  playlists(limit = 0): Promise<Playlist[]> {
+  playlists(startIndex = 0, limit = 0): Promise<Playlist[]> {
     return this.items(
       JellyfinClient.bounded(
         { IncludeItemTypes: 'Playlist', SortBy: 'SortName', SortOrder: 'Ascending' },
+        startIndex,
+        limit,
+      ),
+      normalizePlaylist,
+    );
+  }
+
+  favoritePlaylists(limit = 50): Promise<Playlist[]> {
+    return this.items(
+      JellyfinClient.bounded(
+        {
+          Filters: 'IsFavorite',
+          IncludeItemTypes: 'Playlist',
+          SortBy: 'SortName',
+          SortOrder: 'Ascending',
+        },
         0,
         limit,
       ),
