@@ -90,10 +90,6 @@ export class RemoteControl {
   /** Start playback of items on the remote session; the client builds its
    *  own queue from the item ids. */
   playNow(sessionId: string, itemIds: string[], startIndex = 0): Promise<void> {
-    return this.jf.remotePlay(sessionId, {
-      ItemIds: itemIds,
-      StartIndex: startIndex,
-      PlayCommand: 'PlayNow',
-    });
+    return this.jf.remotePlay(sessionId, itemIds, startIndex);
   }
 }

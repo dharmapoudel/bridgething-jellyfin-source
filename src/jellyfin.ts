@@ -545,8 +545,16 @@ export class JellyfinClient {
 
   // Instruct one session to start playing items (the client builds its own
   // queue from ItemIds, starting at StartIndex).
-  async remotePlay(sessionId: string, body: Record<string, unknown>): Promise<void> {
-    await this.request<void>('POST', `/Sessions/${encodeURIComponent(sessionId)}/Play`, {}, body);
+  async remotePlay(sessionId: string, itemIds: string[], startIndex = 0): Promise<void> {
+    // NOTE: the route is /Playing (not /Play) and every argument is a query
+    // parameter — see SessionController.Play in the Jellyfin source. A body
+    // is not accepted.
+    const params: Record<string, string | number | boolean> = {
+      playCommand: 'PlayNow',
+      itemIds: itemIds.join(','),
+    };
+    if (startIndex > 0) params.startIndex = startIndex;
+    await this.request<void>('POST', `/Sessions/${encodeURIComponent(sessionId)}/Playing`, params);
   }
 
   // Resume detection: fetch one library item as a Track.
