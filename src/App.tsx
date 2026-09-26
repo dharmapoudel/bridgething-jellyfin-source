@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { bustAll, stickyBustAll } from './cache';
 import { getClient } from './client';
-import { ArtCtx, Icon, useMenu, usePlayer, type ArtResolver, type MenuAction } from './components';
+import {
+  ArtCtx,
+  Icon,
+  bumpArtGen,
+  clearArtCache,
+  useMenu,
+  usePlayer,
+  type ArtResolver,
+  type MenuAction,
+} from './components';
 import { JellyfinClient, type Creds } from './jellyfin';
 import { player } from './player';
 import type { View } from './nav';
@@ -12,6 +22,12 @@ import NowPlaying from './views/NowPlaying';
 import { QueueHandle, QueueSheet } from './QueueSheet';
 import Queue from './views/Queue';
 import Setup, { CREDS_KEY, type StoredCreds } from './views/Setup';
+
+// Phone settings page "Clear cached data" writes this config key with a
+// timestamp; the device wipes its caches when it sees it (real-time while
+// running, or on the next start via the check in load()).
+const CACHE_CLEAR_FLAG = 'finch:cache_clear';
+const CACHE_CLEAR_HANDLED = 'finch:cache_clear_handled';
 
 const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'playlist' | 'album'; label: string }[] = [
   { view: { name: 'home' }, icon: 'home', label: 'Home' },
@@ -172,6 +188,34 @@ export default function App() {
   const menu = useMenu();
   usePlayer();
 
+  // "Clear cached data" from the phone settings page writes this config key.
+  // The device wipes all three cache layers and reloads Home fresh. The
+  // handled marker (device store) dedupes the real-time event against the
+  // startup check below, so a tap while the app is closed still lands once.
+  const handleCacheClear = useCallback(async (flagValue: string): Promise<void> => {
+    const ts = Number(flagValue) || 0;
+    if (!ts) return;
+    const client = getClient();
+    let handled = 0;
+    try {
+      const r = await client.store.get({ key: CACHE_CLEAR_HANDLED });
+      if (r.ok && r.response.value) handled = Number(r.response.value) || 0;
+    } catch {
+      // ignore: treat as never handled
+    }
+    if (ts <= handled) return;
+    bustAll();
+    stickyBustAll();
+    await clearArtCache();
+    bumpArtGen();
+    try {
+      await client.store.put({ key: CACHE_CLEAR_HANDLED, value: String(ts) });
+    } catch {
+      // ignore
+    }
+    setStack([{ name: 'home' }]);
+  }, []);
+
   const view = stack[stack.length - 1];
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -192,6 +236,14 @@ export default function App() {
     player.configure(client);
     await player.ensureDeviceId();
     await player.loadPrefs();
+    // A "clear cached data" tap that landed while the app was closed is
+    // honored here, before the first views mount and fetch.
+    try {
+      const flag = await getClient().config.get({ key: CACHE_CLEAR_FLAG });
+      if (flag.ok && flag.response.value) await handleCacheClear(flag.response.value);
+    } catch {
+      // config unreadable: proceed normally
+    }
     setJf(client);
     setCredsState('ready');
     // Re-attach to the remote session, if any; then adopt anything already
@@ -205,7 +257,7 @@ export default function App() {
     } catch {
       // non-fatal: the player just starts empty
     }
-  }, []);
+  }, [handleCacheClear]);
 
   // daemon link + player/volume subscriptions, once
   useEffect(() => {

@@ -18,6 +18,28 @@ export function bust(keyPrefix: string): void {
   for (const k of [...cache.keys()]) if (k.startsWith(keyPrefix)) cache.delete(k);
 }
 
+// ---- full clear (the Settings "Clear cached data" button) ----
+// Drops everything: the in-memory API cache, the sticky localStorage tier,
+// and (via clearArtCache in components.tsx) both artwork tiers.
+export function bustAll(): void {
+  cache.clear();
+}
+
+export function stickyBustAll(): void {
+  const store = ls();
+  if (!store) return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < store.length; i++) {
+      const k = store.key(i);
+      if (k && k.startsWith(STICKY_PREFIX)) keys.push(k);
+    }
+    for (const k of keys) store.removeItem(k);
+  } catch {
+    // ignore
+  }
+}
+
 // ---- persistent sticky cache (cold-start loader) ----
 // localStorage-backed: survives app restarts, so a cold start paints the last
 // known library instantly instead of spinning on the network. Views seed from

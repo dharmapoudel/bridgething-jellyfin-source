@@ -241,6 +241,23 @@ function Settings() {
     }
   }
 
+  // "Clear cached data": tells the Car Thing to wipe all three cache layers
+  // (in-memory API cache, sticky localStorage, artwork incl. the persistent
+  // store) and reload fresh. The device picks the flag up in real time while
+  // running, or on its next start via the same check in load().
+  async function clearCache(): Promise<void> {
+    setBusy(true);
+    setStatus({ kind: 'info', text: 'telling Finch to clear its caches…' });
+    try {
+      await settings.config.set('finch:cache_clear', String(Date.now()));
+      setStatus({ kind: 'ok', text: 'done — Finch on the Car Thing is clearing its caches and reloading.' });
+    } catch (e) {
+      setStatus({ kind: 'err', text: e instanceof Error ? e.message : 'could not reach the Car Thing.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Quick Connect needs Jellyfin 10.8+ with the feature enabled. Anything
   // else answers 404 here — say so plainly instead of "server error 404".
   function qcError(e: unknown): string {
@@ -319,6 +336,17 @@ function Settings() {
         <p className="hint">Clears the saved server URL and credentials from the Car Thing.</p>
         <button type="button" disabled={busy} onClick={signOut}>
           Sign out
+        </button>
+      </section>
+
+      <section>
+        <h2>Cache</h2>
+        <p className="hint">
+          Wipes Finch's cached library data and artwork on the Car Thing and reloads everything fresh. Use it
+          when the library looks stale after server-side changes.
+        </p>
+        <button type="button" disabled={busy} onClick={clearCache}>
+          Clear cached data
         </button>
       </section>
 

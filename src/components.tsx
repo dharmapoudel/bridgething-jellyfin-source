@@ -45,6 +45,57 @@ function rememberArt(url: string, obj: string): void {
   artObjects.set(url, obj); // (re-)inserted at the young end: LRU order
 }
 
+// Bumped whenever the art cache is cleared while the app is running. Every
+// mounted useCachedArt subscribes and re-runs its load on bump, so no tile
+// keeps rendering a revoked blob URL — art re-fetches fresh instead.
+let artGen = 0;
+const artGenListeners = new Set<() => void>();
+export function bumpArtGen(): void {
+  artGen++;
+  for (const fn of [...artGenListeners]) fn();
+}
+function useArtGen(): number {
+  return useSyncExternalStore(
+    useCallback(
+      (fn: () => void) => {
+        artGenListeners.add(fn);
+        return () => {
+          artGenListeners.delete(fn);
+        };
+      },
+      [],
+    ),
+    () => artGen,
+  );
+}
+
+// Drops both art tiers: revokes the in-memory blob URLs and wipes the
+// persistent daemon-store entries (same empty-value convention the LRU
+// eviction itself uses). Callers bump the art generation afterwards so
+// mounted tiles re-fetch instead of showing revoked URLs.
+export async function clearArtCache(): Promise<void> {
+  for (const obj of artObjects.values()) {
+    try {
+      URL.revokeObjectURL(obj);
+    } catch {
+      // ignore
+    }
+  }
+  artObjects.clear();
+  try {
+    const client = getClient();
+    const idxRaw = await persistRead(PART_INDEX);
+    const idx: string[] = idxRaw ? (JSON.parse(idxRaw) as string[]) : [];
+    await Promise.all(
+      [...idx, PART_INDEX].map(k =>
+        client.store.put({ key: k, value: '' }).catch(() => undefined),
+      ),
+    );
+  } catch {
+    // store unavailable: the memory tier was still cleared
+  }
+}
+
 // ---- persistent art tier (daemon store, survives restarts) ----
 const PART_PREFIX = 'finch:art:';
 const PART_INDEX = 'finch:art:index';
@@ -189,6 +240,7 @@ export function useCachedArt(src: string | null): { url: string | null; failed: 
   // mid-outage (the common "tile stuck on the note icon" case). Cache hits
   // return instantly below, so only missing/failed art re-hits the network.
   const linkGen = useLinkGen();
+  const gen = useArtGen();
   useEffect(() => {
     if (!src) {
       setObj(null);
@@ -212,7 +264,7 @@ export function useCachedArt(src: string | null): { url: string | null; failed: 
       dead = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, linkGen]);
+  }, [src, linkGen, gen]);
   return { url: obj, failed };
 }
 
