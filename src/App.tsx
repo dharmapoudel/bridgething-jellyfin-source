@@ -19,14 +19,15 @@ const NAV_ITEMS: { view: View; icon: 'home' | 'library' | 'search' | 'queue' | '
 ];
 
 // o-music-style top tab strip: each tab's 2px line sits directly below its
-// hardware preset button, the way o-music's tick marks do. Button centers were
-// measured from device photos at 15.2% / 39.0% / 64.6% of screen width
-// (4th button at 88.1%, unused for now). The label sits under its line, like
-// o-music's COVER. The bottom nav bar is gone to reclaim vertical space. The
-// tab's icon is revealed only while the button is pressed: it drops down under
-// the line, then slides back up and hides when the press is lifted. The active
-// tab is shown by its leaf-green line and bright label.
-const TAB_X = ['15.2%', '39.0%', '64.6%']; // hardware preset button centers, % of screen width
+// hardware preset button, the way o-music's tick marks do. o-music hardcodes
+// the preset centers as PRESET_AT = [12.5, 37.5, 62.5, 87.5] (evenly spread
+// with matching margins), so these are used verbatim instead of measured.
+// The label sits under its line, like o-music's COVER. The bottom nav bar is
+// gone to reclaim vertical space. The tab's icon is revealed only while the
+// button is pressed: it drops down under the line, then slides back up and
+// hides when the press is lifted. The active tab is shown by its leaf-green
+// line and bright label.
+const TAB_X = ['12.5%', '37.5%', '62.5%']; // o-music PRESET_AT, 4th (87.5%) unused for now
 function TopTabs({ view, onNav }: { view: View; onNav: (v: View) => void }) {
   const activeIdx = view.name === 'home' ? 0 : view.name === 'queue' ? 2 : 1;
   return (
